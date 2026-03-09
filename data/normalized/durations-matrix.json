@@ -1,0 +1,133 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "notes": "Matrice de durées en minutes. Les durées varient selon la longueur de cheveux, la complexité technique et les options. Sources : benchmark web (Holizy, Hair Professionnel, Centre-Commercial.fr) + estimation métier quand non publié. Les durées incluent shampoing et finition sauf mention contraire."
+  },
+  "base_durations": {
+    "notes": "Durée de base par type de prestation et longueur de cheveux (en minutes)",
+    "coupe": {
+      "court": 45,
+      "mi-long": 60,
+      "long": 75,
+      "notes": "Inclut shampoing (~5min) + coupe + brushing/coiffage. Source : Holizy — courts 30-45min, mi-longs 45-60min, longs 60-90min. On prend fourchette haute car inclut brushing."
+    },
+    "coupe_homme": {
+      "standard": 30,
+      "degradé_complexe": 45,
+      "notes": "Homme = principalement court. Dégradé complexe ou style mode = +15min."
+    },
+    "coupe_enfant": {
+      "standard": 25,
+      "notes": "Hypothèse : coupe simple, enfant < 12 ans."
+    },
+    "brushing_seul": {
+      "court": 30,
+      "mi-long": 40,
+      "long": 50,
+      "notes": "Brushing sans coupe. Inclut shampoing."
+    },
+    "coloration_complete": {
+      "court": 90,
+      "mi-long": 105,
+      "long": 120,
+      "notes": "Inclut application (~20-30min) + temps de pose (~30-40min) + rinçage + soin + brushing. Source : Holizy — coloration ajoute 2-3h au total."
+    },
+    "balayage": {
+      "court": 120,
+      "mi-long": 150,
+      "long": 180,
+      "notes": "Technique plus longue que couleur uniforme. Inclut mèchage + pose + rinçage + coiffage. Source : Holizy — balayage 2-4h."
+    },
+    "meches": {
+      "court": 105,
+      "mi-long": 135,
+      "long": 165,
+      "notes": "Mèches au papier aluminium. Source : Hair Professionnel/Centre-Commercial.fr — 1h30 à 4h selon volume."
+    },
+    "decoloration": {
+      "standard": 120,
+      "notes": "Très variable selon état et historique colorimétrique. Hypothèse : cheveux vierges mi-longs."
+    },
+    "permanente": {
+      "court": 120,
+      "mi-long": 150,
+      "long": 180,
+      "notes": "Hypothèse métier : pas de source web fiable sur les durées. Inclut enroulage + temps de pose + rinçage + neutralisation."
+    },
+    "soin_express": {
+      "standard": 10,
+      "notes": "Ajout rapide en fin de prestation."
+    },
+    "soin_profond": {
+      "standard": 25,
+      "notes": "Masque sous casque ou chaleur."
+    },
+    "soin_keratine": {
+      "court": 60,
+      "mi-long": 90,
+      "long": 120,
+      "notes": "Lissage kératine. Durée très dépendante de la longueur et de l'épaisseur."
+    },
+    "soin_botox": {
+      "standard": 90,
+      "notes": "Traitement reconstructif. Hypothèse : cheveux mi-longs."
+    },
+    "taille_barbe": {
+      "standard": 20,
+      "notes": "Taille simple."
+    },
+    "rasage_traditionnel": {
+      "standard": 30,
+      "notes": "Serviette chaude + rasage + soin."
+    },
+    "couleur_barbe": {
+      "standard": 25,
+      "notes": "Application + pose courte + rinçage."
+    },
+    "chignon": {
+      "standard": 60,
+      "elabore": 90,
+      "notes": "60min pour chignon classique, 90min pour coiffure de mariée."
+    },
+    "mise_en_plis": {
+      "standard": 45,
+      "notes": "Technique classique avec rouleaux."
+    }
+  },
+  "modificateurs": {
+    "notes": "Ajustements en minutes à ajouter à la durée de base",
+    "cheveux_epais": {
+      "ajout_min": 15,
+      "notes": "Cheveux très épais ou très denses — ajouter ~15min"
+    },
+    "cheveux_boucles_frises": {
+      "ajout_min": 20,
+      "notes": "Texture bouclée/frisée nécessite plus de temps de travail. Source : Holizy — bouclés 90-120min vs 60-90min lisses."
+    },
+    "premiere_visite": {
+      "ajout_min": 10,
+      "notes": "Consultation initiale pour nouveau client"
+    },
+    "coupe_transformation": {
+      "ajout_min": 30,
+      "notes": "Changement radical de style nécessitant consultation approfondie"
+    },
+    "meches_fines": {
+      "ajout_min": 30,
+      "notes": "Mèches très fines et nombreuses. Source : Centre-Commercial.fr"
+    },
+    "double_process_couleur": {
+      "ajout_min": 45,
+      "notes": "Décoloration + recoloration = deux passages"
+    },
+    "soin_additionnel": {
+      "ajout_min": 15,
+      "notes": "Ajout d'un soin express en supplément d'une prestation"
+    }
+  },
+  "buffer_inter_rdv": {
+    "standard_min": 10,
+    "apres_coloration_min": 15,
+    "notes": "Temps tampon entre deux RDV pour nettoyage poste, désinfection, préparation. Plus long après prestation chimique (coloration, balayage, permanente)."
+  }
+}
