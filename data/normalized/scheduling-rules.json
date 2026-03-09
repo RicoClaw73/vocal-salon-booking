@@ -1,0 +1,111 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "salon": "Maison Éclat",
+    "notes": "Règles métier pour le moteur de planification multi-ressources. Utilisées par l'agent vocal pour proposer des créneaux valides."
+  },
+  "salon_horaires": {
+    "ouverture": {
+      "mardi": {"debut": "09:00", "fin": "20:00"},
+      "mercredi": {"debut": "09:00", "fin": "19:00"},
+      "jeudi": {"debut": "09:00", "fin": "20:00"},
+      "vendredi": {"debut": "09:00", "fin": "20:00"},
+      "samedi": {"debut": "09:00", "fin": "18:00"}
+    },
+    "fermeture": ["dimanche", "lundi"],
+    "jours_feries": "Fermé les jours fériés français. Liste à charger dynamiquement.",
+    "notes": "Amplitude max du salon. Chaque employé a ses propres horaires dans employees.json."
+  },
+  "regles_affectation": {
+    "priorite_competence": {
+      "description": "Un employé ne peut être affecté qu'à un service listé dans ses compétences.",
+      "stricte": true
+    },
+    "priorite_niveau": {
+      "description": "Pour les prestations techniques (balayage, mèches, décoloration, mariée), préférer les niveaux expert > senior > confirmé. Ne jamais affecter un junior ou apprenti.",
+      "services_restreints": [
+        "balayage_court", "balayage_mi_long", "balayage_long",
+        "meches_court", "meches_mi_long", "meches_long",
+        "decoloration", "coupe_transformation",
+        "forfait_mariage", "soin_keratine", "soin_botox",
+        "forfait_balayage_coupe_mi_long", "forfait_balayage_coupe_long"
+      ],
+      "niveaux_autorises": ["expert", "senior", "confirme"],
+      "notes": "Hugo (junior) et Amira (apprenti) exclus de ces prestations."
+    },
+    "preference_client": {
+      "description": "Si le client a un coiffeur attitré, tenter de le planifier avec cet employé en priorité.",
+      "fallback": "Proposer un autre employé compétent si le coiffeur attitré est indisponible, avec confirmation vocale."
+    },
+    "charge_max_simultanee": {
+      "description": "Un employé ne peut gérer qu'un seul client actif à la fois.",
+      "exception": "Pendant un temps de pose (coloration), l'employé peut lancer un shampoing ou une coupe courte si le créneau est suffisant.",
+      "notes": "La gestion du chevauchement temps de pose est un objectif v2. En v1, un créneau = un client = un employé."
+    }
+  },
+  "regles_temporelles": {
+    "buffer_entre_rdv": {
+      "standard_min": 10,
+      "apres_chimique_min": 15,
+      "services_chimiques": [
+        "couleur_complete_court", "couleur_complete_mi_long", "couleur_complete_long",
+        "balayage_court", "balayage_mi_long", "balayage_long",
+        "meches_court", "meches_mi_long", "meches_long",
+        "decoloration", "permanente",
+        "forfait_couleur_coupe_court", "forfait_couleur_coupe_mi_long", "forfait_couleur_coupe_long",
+        "forfait_balayage_coupe_mi_long", "forfait_balayage_coupe_long"
+      ],
+      "notes": "Nettoyage poste + préparation. 15min après prestation chimique pour aération et nettoyage produits."
+    },
+    "dernier_rdv": {
+      "description": "Le dernier RDV doit se terminer au plus tard à l'heure de fermeture du salon.",
+      "regle": "heure_fin_rdv = heure_debut_rdv + duree_service <= heure_fermeture_salon",
+      "notes": "Pas de démarrage tardif qui ferait dépasser la fermeture."
+    },
+    "pause_dejeuner": {
+      "description": "Aucun RDV ne peut chevaucher la pause déjeuner de l'employé.",
+      "stricte": true
+    },
+    "rdv_minimum_avant_pause": {
+      "description": "Ne pas commencer un RDV si sa durée prévue dépasse le début de la pause.",
+      "stricte": true
+    }
+  },
+  "regles_conflits": {
+    "double_booking": {
+      "description": "Impossible de réserver deux RDV pour le même employé sur un créneau qui se chevauche.",
+      "stricte": true
+    },
+    "ressources_partagees": {
+      "description": "Certains équipements sont limités en nombre (bacs à shampoing, casques, postes coloration).",
+      "bacs_shampoing": 3,
+      "casques_soin": 2,
+      "postes_coloration": 3,
+      "notes": "En v1, on ne gère pas la contention des ressources matérielles. Objectif v2."
+    },
+    "annulation": {
+      "delai_gratuit_heures": 24,
+      "notes": "Annulation gratuite si > 24h avant le RDV. Sinon, mention vocale que des frais peuvent s'appliquer."
+    }
+  },
+  "fallback": {
+    "aucun_creneau_disponible": {
+      "action": "Proposer les 3 prochains créneaux disponibles les plus proches de la date souhaitée.",
+      "si_aucun_cette_semaine": "Proposer le premier créneau de la semaine suivante.",
+      "notes": "L'agent vocal ne doit jamais dire 'aucun créneau' sans proposer une alternative."
+    },
+    "coiffeur_prefere_indisponible": {
+      "action": "Informer le client et proposer un collègue compétent pour la même prestation.",
+      "script_vocal": "Malheureusement, [prénom] n'est pas disponible à cette date. Je peux vous proposer [prénom_alt] qui est également [compétence]. Souhaitez-vous réserver avec [prénom_alt] ou préférez-vous une autre date avec [prénom] ?"
+    },
+    "service_non_reconnu": {
+      "action": "Demander reformulation puis proposer les services les plus proches.",
+      "max_tentatives": 2,
+      "si_echec": "Proposer de transférer vers un humain ou rappeler les catégories disponibles."
+    }
+  },
+  "slots_granularite": {
+    "pas_min": 15,
+    "notes": "Les créneaux sont proposés par tranches de 15 minutes (9:00, 9:15, 9:30...). Un RDV de 45min occupe 3 slots."
+  }
+}
