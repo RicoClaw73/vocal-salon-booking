@@ -65,6 +65,32 @@ class Settings(BaseSettings):
     # Rate limiting (in-memory, per-client-IP)
     RATE_LIMIT_PER_MINUTE: int = 60  # 0 = disabled
 
+    # ── Telephony integration (Phase 5.3) ───────────────────────
+    # Controls whether the /telephony/* endpoints accept inbound events.
+    # Disabled by default — flip to True to start pilot ingestion.
+    TELEPHONY_ENABLED: bool = False
+
+    # When True, telephony events are processed through the full pipeline
+    # but no outbound side-effects (TTS audio delivery, webhook callbacks)
+    # are actually performed.  Useful for shadow/pilot validation.
+    TELEPHONY_DRY_RUN: bool = True
+
+    # Telephony provider adapter to use.
+    #   "local"  → simulated provider (default, no credentials needed)
+    #   "twilio" → Twilio-compatible webhook contract (scaffold)
+    #   "vapi"   → Vapi-compatible webhook contract (scaffold)
+    TELEPHONY_PROVIDER: str = "local"
+
+    # Optional shared secret for verifying inbound telephony webhooks.
+    # When empty, signature verification is skipped (dev/local mode).
+    TELEPHONY_WEBHOOK_SECRET: str = ""
+
+    # Maximum payload size (bytes) for inbound telephony events.
+    TELEPHONY_MAX_PAYLOAD_BYTES: int = 256_000  # 250 KB
+
+    # Event retention: max age (hours) before processed-event IDs are pruned.
+    TELEPHONY_EVENT_TTL_HOURS: int = 24
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
