@@ -100,6 +100,16 @@ docker compose up -d
 # La doc OpenAPI sur http://localhost:8000/docs
 ```
 
+## Outils n8n intégrés pour agents de code
+
+Le repo inclut des submodules dédiés à n8n dans `tools/` :
+
+- `tools/n8n-mcp`
+- `tools/n8n-skills`
+- `tools/n8n-mcp-cc-buildier`
+
+Le fichier `CLAUDE.md` impose leur usage prioritaire pour toute tâche liée aux workflows n8n.
+
 ## Licence
 
 Projet portfolio — usage démonstration uniquement.
