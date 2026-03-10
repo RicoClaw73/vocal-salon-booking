@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth import require_api_key
+from app.circuit_breaker import stt_circuit_breaker, tts_circuit_breaker
 from app.config import settings
 from app.database import get_db
 from app.models import Booking, BookingStatus, TranscriptEvent, VoiceSession
@@ -57,17 +58,23 @@ async def get_metrics() -> dict:
 
 @router.get("/providers/status")
 async def provider_status() -> dict:
-    """Report STT/TTS provider readiness state.
+    """Report STT/TTS provider readiness state with circuit-breaker info.
 
     Shows which providers are configured, whether credentials are present,
     and whether the system has fallen back to mock.  No secrets are exposed.
+    Includes circuit-breaker state per provider role (Phase 5.2).
     """
-    return check_provider_readiness(
+    readiness = check_provider_readiness(
         stt_requested=settings.STT_PROVIDER,
         stt_api_key=settings.STT_API_KEY,
         tts_requested=settings.TTS_PROVIDER,
         tts_api_key=settings.TTS_API_KEY,
     )
+    readiness["circuit_breakers"] = {
+        "stt": stt_circuit_breaker.snapshot(),
+        "tts": tts_circuit_breaker.snapshot(),
+    }
+    return readiness
 
 
 @router.post("/providers/smoke-test")

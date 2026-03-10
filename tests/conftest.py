@@ -17,6 +17,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.circuit_breaker import stt_circuit_breaker, tts_circuit_breaker
 from app.database import get_db
 from app.models import Base
 from app.observability import metrics
@@ -43,9 +44,11 @@ def event_loop():
 
 @pytest.fixture(autouse=True)
 async def setup_db():
-    """Create all tables before each test, drop after.  Reset rate limiter & metrics."""
+    """Create all tables before each test, drop after.  Reset rate limiter, metrics & circuit breakers."""
     _reset_buckets()
     metrics.reset()
+    stt_circuit_breaker.reset()
+    tts_circuit_breaker.reset()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with test_session_factory() as session:
