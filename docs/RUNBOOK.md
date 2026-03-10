@@ -27,6 +27,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
 | `RATE_LIMIT_PER_MINUTE`| 60          | 0 to disable; adjust for expected load      |
 | `STT_PROVIDER`        | `mock`        | `deepgram` for real STT (needs API key)     |
 | `TTS_PROVIDER`        | `mock`        | `elevenlabs` for real TTS (needs API key)   |
+| `TTS_ARTIFACT_DIR`    | `data/tts_artifacts` | Local directory for persisted TTS audio files |
 
 On startup the app will:
 1. Create database tables (idempotent)
@@ -74,13 +75,18 @@ INFO app.routers.voice | session_ended | request_id=g7h8i9 session_id=abc123 tur
 ```
 
 **Key log events:**
-| Event                   | Meaning                                      |
-|-------------------------|----------------------------------------------|
-| `session_started`       | New voice session created                     |
-| `message_processed`     | User message handled (via /sessions/message)  |
-| `voice_turn_processed`  | Full voice turn completed successfully        |
-| `voice_turn_fallback`   | Turn fell back to unknown-intent handler      |
-| `session_ended`         | Session closed                                |
+| Event                        | Meaning                                      |
+|------------------------------|----------------------------------------------|
+| `session_started`            | New voice session created                     |
+| `message_processed`          | User message handled (via /sessions/message)  |
+| `voice_turn_processed`       | Full voice turn completed successfully        |
+| `voice_turn_fallback`        | Turn fell back to unknown-intent handler      |
+| `session_ended`              | Session closed                                |
+| `circuit_breaker_tripped`    | Provider circuit breaker opened (Phase 5.2)   |
+| `circuit_breaker_closed`     | Provider circuit breaker recovered (Phase 5.2)|
+| `provider_stt_fallback`      | STT provider failed, fell back to mock        |
+| `provider_tts_fallback`      | TTS provider failed, fell back to mock        |
+| `tts_artifact_stored`        | TTS audio file persisted to local store       |
 
 **Filtering tips:**
 ```bash
@@ -136,6 +142,9 @@ curl -s http://localhost:8000/api/v1/ops/metrics | python -m json.tool
 - `auth_failures` → potential unauthorized access attempts
 - `rate_limit_hits` → client overloading
 - `voice_turn_ms.avg_ms` → response latency (target: < 500ms local)
+- `cb_stt_tripped` / `cb_tts_tripped` → circuit breaker trips (provider instability)
+- `cb_stt_short_circuit` / `cb_tts_short_circuit` → requests bypassed due to open breaker
+- `provider_stt_fallback` / `provider_tts_fallback` → fallback-to-mock events
 
 ### Recent sessions
 ```bash
@@ -215,24 +224,137 @@ local-first deployment. If you need persistent metrics, export the
 **Fix:** The system automatically loads from DB on next request for that session.
 If sessions are still missing, check the database file exists and is not corrupted.
 
+### 5.7 Provider circuit breaker tripped (Phase 5.2)
+
+**Symptom:** `cb_stt_tripped` or `cb_tts_tripped` counters rising; `cb_stt_short_circuit`
+/ `cb_tts_short_circuit` growing (requests bypassing the real provider).
+
+**Diagnosis:**
+```bash
+# Check circuit breaker state
+curl -s http://localhost:8000/api/v1/ops/providers/status | python -m json.tool
+```
+
+Look at `circuit_breakers.stt.state` and `circuit_breakers.tts.state`:
+- `closed` → normal
+- `open` → provider is being bypassed; requests go to mock fallback
+- `half_open` → probe in progress (one request allowed through to test recovery)
+
+**How it works:**
+
+| Parameter            | Default  | Meaning                                              |
+|----------------------|----------|------------------------------------------------------|
+| `failure_threshold`  | 3        | Consecutive failures before tripping                 |
+| `base_cooldown_s`    | 10s      | Wait before first half-open probe                    |
+| `max_cooldown_s`     | 120s     | Cap for exponential backoff                          |
+| `backoff_multiplier` | 2.0      | Cooldown grows: 10s → 20s → 40s → 80s → 120s (cap)  |
+| `success_threshold`  | 1        | Successes in half-open to close the breaker          |
+
+**Recovery:** The breaker self-heals. Once the cooldown elapses, a single probe
+request is sent to the real provider. If it succeeds, the breaker closes and
+normal operation resumes. No manual intervention needed unless the underlying
+provider is permanently down.
+
+**Manual check:** Run the smoke test to verify provider health:
+```bash
+curl -s -X POST http://localhost:8000/api/v1/ops/providers/smoke-test | python -m json.tool
+```
+
+### 5.8 Provider falling back to mock unexpectedly
+
+**Symptom:** Responses show `"provider": "mock"` in `stt_meta`/`tts_meta` even
+though a real provider is configured.
+
+**Possible causes:**
+1. API key missing or invalid → check `.env` for `STT_API_KEY` / `TTS_API_KEY`
+2. Circuit breaker is open (provider recently failed) → check `/ops/providers/status`
+3. Provider quota exhausted → check provider dashboard
+
 ---
 
-## 6. Running Tests
+## 6. Audio Path Usage (Phase 5.2)
 
+### Sending real audio through the voice turn endpoint
+
+The `/voice/turn` endpoint accepts three input modes:
+
+1. **Text-only** (backward compat): `{"text": "Je voudrais réserver..."}`
+2. **Mock transcript**: `{"mock_transcript": "..."}`
+3. **Real audio** (Phase 5.2): send base64-encoded audio bytes
+
+**Audio mode example:**
 ```bash
-# Full test suite
-pytest tests/ -v
+# Encode a WAV file to base64
+AUDIO_B64=$(base64 -w0 recording.wav)
 
-# Only observability / ops tests
-pytest tests/test_observability.py tests/test_ops.py -v
+curl -s -X POST http://localhost:8000/api/v1/voice/turn \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"audio_base64\": \"$AUDIO_B64\",
+    \"audio_format\": \"wav\",
+    \"audio_sample_rate\": 16000,
+    \"audio_encoding\": \"linear16\"
+  }" | python -m json.tool
+```
 
-# Quick health check
-pytest tests/test_health.py -v
+**Supported audio parameters:**
+
+| Field               | Values                                        | Default |
+|---------------------|-----------------------------------------------|---------|
+| `audio_format`      | wav, mp3, ogg, pcm                            | wav     |
+| `audio_sample_rate` | 8000, 16000, 22050, 44100, 48000              | 16000   |
+| `audio_encoding`    | linear16, mulaw, alaw, opus, mp3, ogg_vorbis  | —       |
+| `audio_content_type`| MIME type (informational only)                 | —       |
+
+**Priority:** When both `text` and `audio_base64` are provided, `text` takes
+precedence (audio is ignored). This preserves backward compatibility.
+
+### TTS audio artifact persistence
+
+When a real TTS provider produces audio bytes, they are persisted locally:
+
+```
+data/tts_artifacts/
+  <session_id>/
+    <text_hash>.wav
+    <text_hash>.mp3
+```
+
+The response includes `tts_audio_url` with a `file://` URI pointing to the
+persisted artifact. In mock mode, `tts_audio_url` is `null` (no audio generated).
+
+**Custom artifact directory:**
+```bash
+export TTS_ARTIFACT_DIR=/var/data/tts_audio
 ```
 
 ---
 
-## 7. Monitoring Checklist (Daily Pilot)
+## 7. Running Tests
+
+```bash
+# Full test suite (275+ tests)
+uv run python -m pytest tests/ -v
+
+# Only observability / ops tests
+uv run python -m pytest tests/test_observability.py tests/test_ops.py -v
+
+# Circuit breaker tests
+uv run python -m pytest tests/test_circuit_breaker.py -v
+
+# Audio path tests
+uv run python -m pytest tests/test_audio_path.py -v
+
+# TTS artifact store tests
+uv run python -m pytest tests/test_tts_artifact_store.py -v
+
+# Quick health check
+uv run python -m pytest tests/test_health.py -v
+```
+
+---
+
+## 8. Monitoring Checklist (Daily Pilot)
 
 - [ ] `/health` returns `status: ok`, `database: ok`
 - [ ] Fallback rate < 20% (`/ops/metrics` → voice_fallbacks / voice_turns)
@@ -240,3 +362,6 @@ pytest tests/test_health.py -v
 - [ ] No rate_limit_hits (unless expected)
 - [ ] Average latency < 500ms (`/ops/metrics` → latencies.voice_turn_ms.avg_ms)
 - [ ] Review any high-fallback sessions (`/ops/failures/summary`)
+- [ ] Circuit breakers closed (`/ops/providers/status` → state: "closed")
+- [ ] No `cb_*_tripped` spikes in metrics
+- [ ] TTS artifact directory not filling up excessively (clean up old sessions)
