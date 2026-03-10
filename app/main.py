@@ -19,7 +19,8 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import async_session, engine
 from app.models import Base
-from app.routers import availability, bookings, employees, services, voice
+from app.observability import metrics
+from app.routers import availability, bookings, employees, ops, services, voice
 from app.schemas import HealthOut
 from app.seed import seed_all
 
@@ -58,20 +59,26 @@ app.include_router(employees.router, prefix=API_PREFIX)
 app.include_router(availability.router, prefix=API_PREFIX)
 app.include_router(bookings.router, prefix=API_PREFIX)
 app.include_router(voice.router, prefix=API_PREFIX)
+app.include_router(ops.router, prefix=API_PREFIX)
 
 
 # ── Health ──────────────────────────────────────────────────
-@app.get("/health", response_model=HealthOut, tags=["health"])
-async def health() -> HealthOut:
-    """Liveness / readiness check."""
+@app.get("/health", tags=["health"])
+async def health() -> dict:
+    """Liveness / readiness check with basic operational counters."""
     db_status = "ok"
     try:
         async with async_session() as session:
             await session.execute(text("SELECT 1"))
     except Exception:
         db_status = "error"
-    return HealthOut(
-        status="ok",
-        version=settings.APP_VERSION,
-        database=db_status,
-    )
+    snap = metrics.snapshot()
+    return {
+        "status": "ok",
+        "version": settings.APP_VERSION,
+        "database": db_status,
+        "uptime_seconds": snap["uptime_seconds"],
+        "voice_turns": snap["counters"].get("voice_turns", 0),
+        "active_sessions": snap["counters"].get("sessions_started", 0)
+        - snap["counters"].get("sessions_completed", 0),
+    }
