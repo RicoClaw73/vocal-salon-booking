@@ -21,11 +21,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.conversation import ConversationState, conversation_manager
 from app.database import get_db
 from app.intent import extract_intent
 from app.models import Booking, BookingStatus, Service
-from app.providers import MockSTTProvider, MockTTSProvider, STTProvider, TTSProvider
+from app.providers import STTProvider, TTSProvider, get_stt_provider, get_tts_provider
 from app.slot_engine import find_available_slots, validate_booking_request
 from app.voice_schemas import (
     AudioMeta,
@@ -91,10 +92,29 @@ _HUMAN_TRANSFER_MSG = (
     "Vous pouvez aussi rappeler au 01 23 45 67 89."
 )
 
-# ── Provider singletons (local mock, swappable) ────────────
+# ── Provider singletons (config-driven, mock default) ──────
 
-_stt_provider: STTProvider = MockSTTProvider()
-_tts_provider: TTSProvider = MockTTSProvider()
+def _init_stt_provider() -> STTProvider:
+    """Build STT provider from settings; falls back to mock if creds missing."""
+    return get_stt_provider(
+        settings.STT_PROVIDER,
+        api_key=settings.STT_API_KEY,
+        model=settings.STT_MODEL or None,
+    )
+
+
+def _init_tts_provider() -> TTSProvider:
+    """Build TTS provider from settings; falls back to mock if creds missing."""
+    return get_tts_provider(
+        settings.TTS_PROVIDER,
+        api_key=settings.TTS_API_KEY,
+        voice_id=settings.TTS_VOICE_ID or None,
+        model=settings.TTS_MODEL or None,
+    )
+
+
+_stt_provider: STTProvider = _init_stt_provider()
+_tts_provider: TTSProvider = _init_tts_provider()
 
 
 # ── Endpoints ────────────────────────────────────────────────
