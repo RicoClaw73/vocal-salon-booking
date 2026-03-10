@@ -4,6 +4,8 @@ Voice pipeline webhook-style endpoints.
 POST /voice/sessions/start    – open a new voice conversation
 POST /voice/sessions/message  – process a transcribed user utterance
 POST /voice/sessions/end      – close a voice session
+POST /voice/turn              – Phase 3: unified voice turn orchestration
+                                (STT → intent → conversation → TTS)
 
 These endpoints form the integration layer between a local STT/TTS pipeline
 and the existing salon booking API.  No external services required.
@@ -11,6 +13,7 @@ and the existing salon booking API.  No external services required.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -22,8 +25,10 @@ from app.conversation import ConversationState, conversation_manager
 from app.database import get_db
 from app.intent import extract_intent
 from app.models import Booking, BookingStatus, Service
+from app.providers import MockSTTProvider, MockTTSProvider, STTProvider, TTSProvider
 from app.slot_engine import find_available_slots, validate_booking_request
 from app.voice_schemas import (
+    AudioMeta,
     BookingDraft,
     SessionEndRequest,
     SessionEndResponse,
@@ -33,7 +38,11 @@ from app.voice_schemas import (
     UserMessageRequest,
     UserMessageResponse,
     VoiceIntent,
+    VoiceTurnRequest,
+    VoiceTurnResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 
@@ -46,6 +55,46 @@ _GREETING = (
 )
 
 _GOODBYE = "Merci d'avoir appelé Maison Éclat. À bientôt !"
+
+# ── Fallback configuration ──────────────────────────────────
+
+FALLBACK_CONFIDENCE_THRESHOLD = 0.5
+"""Confidence below this triggers the deterministic fallback response."""
+
+_FALLBACK_RESPONSES: list[str] = [
+    (
+        "Je n'ai pas bien compris votre demande. Je peux vous aider à :\n"
+        "• Prendre un rendez-vous\n"
+        "• Modifier un rendez-vous existant\n"
+        "• Annuler un rendez-vous\n"
+        "• Vérifier les disponibilités\n"
+        "Pourriez-vous reformuler ?"
+    ),
+    (
+        "Pardon, je n'ai pas saisi. Vous pouvez me dire par exemple : "
+        "\"je voudrais réserver une coupe\" ou \"annuler ma réservation numéro 5\"."
+    ),
+    (
+        "Je suis désolé, je ne comprends toujours pas. "
+        "Essayez de me dire quel service vous intéresse (coupe, couleur, balayage…) "
+        "ou donnez-moi votre numéro de réservation."
+    ),
+]
+"""Rotating fallback messages — vary phrasing to avoid frustrating the caller."""
+
+MAX_CONSECUTIVE_FALLBACKS = 3
+"""After this many consecutive unknowns, offer to transfer to a human."""
+
+_HUMAN_TRANSFER_MSG = (
+    "Il semble que j'aie du mal à vous comprendre. "
+    "Souhaitez-vous être mis en relation avec un membre de notre équipe ? "
+    "Vous pouvez aussi rappeler au 01 23 45 67 89."
+)
+
+# ── Provider singletons (local mock, swappable) ────────────
+
+_stt_provider: STTProvider = MockSTTProvider()
+_tts_provider: TTSProvider = MockTTSProvider()
 
 
 # ── Endpoints ────────────────────────────────────────────────
@@ -119,6 +168,152 @@ async def end_session(payload: SessionEndRequest) -> SessionEndResponse:
         message=_GOODBYE,
         turns=state.turns,
         duration_seconds=state.duration_seconds,
+    )
+
+
+# ── Phase 3: Voice Turn Orchestration ───────────────────────
+
+
+@router.post("/turn", response_model=VoiceTurnResponse)
+async def voice_turn(
+    payload: VoiceTurnRequest,
+    db: AsyncSession = Depends(get_db),
+) -> VoiceTurnResponse:
+    """
+    Unified voice turn endpoint — full STT → Intent → Handler → TTS loop.
+
+    Accepts either pre-transcribed text or mock transcript payload.
+    Creates a session automatically if session_id is not provided.
+    Returns assistant reply with intent metadata and TTS audio metadata.
+    """
+    # 1. Resolve or create session
+    state: ConversationState | None = None
+    if payload.session_id:
+        state = conversation_manager.get_session(payload.session_id)
+        if not state:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Session '{payload.session_id}' introuvable.",
+            )
+        if state.status != SessionStatus.active:
+            raise HTTPException(
+                status_code=409,
+                detail="Cette session est déjà terminée.",
+            )
+    else:
+        # Auto-create session for convenience
+        state = conversation_manager.create_session(
+            client_name=payload.client_name,
+            client_phone=payload.client_phone,
+            channel=payload.channel,
+        )
+
+    # 2. Resolve input text (text > mock_transcript)
+    user_text = payload.text or payload.mock_transcript
+    if not user_text:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide either 'text' or 'mock_transcript'.",
+        )
+
+    # 3. Mock STT step (in real pipeline: transcribe audio_bytes)
+    stt_result = await _stt_provider.transcribe(
+        audio_bytes=user_text.encode("utf-8"),
+        language="fr",
+    )
+    stt_meta = AudioMeta(
+        format="wav",
+        duration_ms=stt_result.duration_ms,
+        sample_rate=16000,
+        provider=stt_result.provider,
+    )
+
+    # 4. Intent extraction
+    state.increment_turn()
+    intent_result = extract_intent(user_text)
+    intent = intent_result.intent
+    confidence = intent_result.confidence
+    entities = intent_result.entities
+
+    # 5. Deterministic fallback strategy
+    #    Only trigger fallback if there is no active intent on the session.
+    #    If the user is mid-conversation (e.g. providing a date after starting
+    #    a booking), the unknown-intent utterance still carries useful entities.
+    has_active_intent = state.current_intent is not None and state.current_intent != VoiceIntent.unknown
+    is_fallback = False
+    if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) and not has_active_intent:
+        is_fallback = True
+        # Track consecutive fallbacks on the session
+        consecutive = getattr(state, "_consecutive_fallbacks", 0) + 1
+        state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
+
+        if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
+            response_text = _HUMAN_TRANSFER_MSG
+            action_taken = "human_transfer_offered"
+        else:
+            # Rotate through fallback messages
+            idx = (consecutive - 1) % len(_FALLBACK_RESPONSES)
+            response_text = _FALLBACK_RESPONSES[idx]
+            action_taken = "fallback"
+
+        # Generate TTS for fallback
+        tts_result = await _tts_provider.synthesize(response_text, language="fr")
+        tts_meta = AudioMeta(
+            format=tts_result.audio_format.value,
+            duration_ms=tts_result.duration_ms,
+            sample_rate=tts_result.sample_rate,
+            provider=tts_result.provider,
+        )
+
+        return VoiceTurnResponse(
+            session_id=state.session_id,
+            turn_number=state.turns,
+            intent=VoiceIntent.unknown,
+            confidence=confidence,
+            response_text=response_text,
+            is_fallback=True,
+            booking_draft=state.booking_draft,
+            action_taken=action_taken,
+            data=None,
+            stt_meta=stt_meta,
+            tts_meta=tts_meta,
+        )
+
+    # Reset consecutive fallback counter on successful intent
+    state._consecutive_fallbacks = 0  # type: ignore[attr-defined]
+
+    # 6. Update session intent (new intent overrides, unless unknown)
+    if intent != VoiceIntent.unknown:
+        state.current_intent = intent
+
+    # 7. Merge extracted entities into booking draft
+    _merge_entities_to_draft(state, entities)
+
+    # 8. Route to appropriate handler
+    handler = _INTENT_HANDLERS.get(state.current_intent or VoiceIntent.unknown, _handle_unknown)
+    response_text, action_taken, data = await handler(state, entities, db)
+
+    # 9. TTS synthesis
+    tts_result = await _tts_provider.synthesize(response_text, language="fr")
+    tts_meta = AudioMeta(
+        format=tts_result.audio_format.value,
+        duration_ms=tts_result.duration_ms,
+        sample_rate=tts_result.sample_rate,
+        provider=tts_result.provider,
+    )
+
+    return VoiceTurnResponse(
+        session_id=state.session_id,
+        turn_number=state.turns,
+        intent=state.current_intent or VoiceIntent.unknown,
+        confidence=confidence,
+        response_text=response_text,
+        is_fallback=False,
+        booking_draft=state.booking_draft,
+        action_taken=action_taken,
+        data=data,
+        stt_meta=stt_meta,
+        tts_meta=tts_meta,
     )
 
 
