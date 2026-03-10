@@ -4,6 +4,15 @@ Application configuration.
 Uses pydantic-settings to load from env vars / .env file.
 SQLite is the default for local dev; switch DATABASE_URL to a PostgreSQL
 connection string for production.
+
+Provider selection (Phase 4):
+  STT_PROVIDER / TTS_PROVIDER control which speech providers are used.
+  Default is "mock" (no credentials needed). Set to a real provider name
+  (e.g. "deepgram", "elevenlabs") **and** provide the matching API key to
+  activate the real provider.  If the key is missing or empty the factory
+  will fall back to mock automatically — so CI / local dev never breaks.
+
+  See .env.example for the full list of supported variables.
 """
 
 from __future__ import annotations
@@ -34,6 +43,18 @@ class Settings(BaseSettings):
 
     # ── i18n placeholder ──────────────────────────────────────
     DEFAULT_LANG: str = "fr"
+
+    # ── Voice providers (Phase 4) ─────────────────────────────
+    # Provider names: "mock" (default), "deepgram", "whisper", "google"
+    STT_PROVIDER: str = "mock"
+    STT_API_KEY: str = ""
+    STT_MODEL: str = ""  # Provider-specific model override (e.g. "nova-2")
+
+    # Provider names: "mock" (default), "elevenlabs", "google"
+    TTS_PROVIDER: str = "mock"
+    TTS_API_KEY: str = ""
+    TTS_VOICE_ID: str = ""  # Provider-specific voice ID
+    TTS_MODEL: str = ""  # Provider-specific model override
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
