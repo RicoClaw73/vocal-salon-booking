@@ -21,6 +21,7 @@ from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
 
 from app.config import settings
+from app.observability import metrics
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -37,6 +38,7 @@ async def require_api_key(
         # Auth disabled — pass through
         return
     if not api_key or api_key != expected:
+        metrics.inc("auth_failures")
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing API key.",

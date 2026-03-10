@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.database import get_db
 from app.models import Base
+from app.observability import metrics
 from app.rate_limit import _reset_buckets
 from app.seed import seed_all
 
@@ -42,8 +43,9 @@ def event_loop():
 
 @pytest.fixture(autouse=True)
 async def setup_db():
-    """Create all tables before each test, drop after.  Reset rate limiter."""
+    """Create all tables before each test, drop after.  Reset rate limiter & metrics."""
     _reset_buckets()
+    metrics.reset()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with test_session_factory() as session:

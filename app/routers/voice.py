@@ -37,6 +37,7 @@ from app.conversation import ConversationState, conversation_manager
 from app.database import get_db
 from app.intent import extract_intent
 from app.models import Booking, BookingStatus, Service
+from app.observability import StructuredLogger, metrics, new_request_id
 from app.providers import STTProvider, TTSProvider, get_stt_provider, get_tts_provider
 from app.rate_limit import rate_limit_dependency
 from app.session_store import (
@@ -63,6 +64,7 @@ from app.voice_schemas import (
 )
 
 logger = logging.getLogger(__name__)
+_slog = StructuredLogger(__name__)
 
 router = APIRouter(
     prefix="/voice",
@@ -200,6 +202,7 @@ async def start_session(
     db: AsyncSession = Depends(get_db),
 ) -> SessionStartResponse:
     """Open a new voice conversation session."""
+    rid = new_request_id()
     state = await _resolve_session(
         db,
         session_id=None,
@@ -209,6 +212,13 @@ async def start_session(
         auto_create=True,
     )
     await db.commit()
+    metrics.inc("sessions_started")
+    _slog.info(
+        "session_started",
+        request_id=rid,
+        session_id=state.session_id,
+        channel=payload.channel,
+    )
     return SessionStartResponse(
         session_id=state.session_id,
         status=state.status,
@@ -223,6 +233,11 @@ async def process_message(
     db: AsyncSession = Depends(get_db),
 ) -> UserMessageResponse:
     """Process a transcribed user utterance through intent detection and fulfillment."""
+    import time as _time
+
+    rid = new_request_id()
+    t0 = _time.monotonic()
+
     state = await _resolve_session(db, payload.session_id)
     if state.status != SessionStatus.active:
         raise HTTPException(status_code=409, detail="Cette session est déjà terminée.")
@@ -260,6 +275,20 @@ async def process_message(
     )
     await db.commit()
 
+    latency_ms = round((_time.monotonic() - t0) * 1000, 2)
+    resolved_intent = (state.current_intent or VoiceIntent.unknown).value
+    metrics.inc("voice_turns")
+    metrics.inc(f"intent_{resolved_intent}")
+    metrics.record_latency("voice_turn_ms", latency_ms)
+    _slog.info(
+        "message_processed",
+        request_id=rid,
+        session_id=state.session_id,
+        intent=resolved_intent,
+        outcome=action_taken,
+        latency_ms=latency_ms,
+    )
+
     return UserMessageResponse(
         session_id=state.session_id,
         intent=state.current_intent or VoiceIntent.unknown,
@@ -276,6 +305,7 @@ async def end_session(
     db: AsyncSession = Depends(get_db),
 ) -> SessionEndResponse:
     """Close a voice conversation session."""
+    rid = new_request_id()
     state = await _resolve_session(db, payload.session_id)
 
     state.status = SessionStatus.completed
@@ -285,6 +315,15 @@ async def end_session(
     conversation_manager.end_session(payload.session_id)
     await _persist_state(db, state)
     await db.commit()
+
+    metrics.inc("sessions_completed")
+    _slog.info(
+        "session_ended",
+        request_id=rid,
+        session_id=state.session_id,
+        turns=state.turns,
+        duration_s=round(state.duration_seconds, 2),
+    )
 
     return SessionEndResponse(
         session_id=state.session_id,
@@ -310,6 +349,11 @@ async def voice_turn(
     Creates a session automatically if session_id is not provided.
     Returns assistant reply with intent metadata and TTS audio metadata.
     """
+    import time as _time
+
+    rid = new_request_id()
+    t0 = _time.monotonic()
+
     # 1. Resolve or create session
     state: ConversationState
     if payload.session_id:
@@ -400,6 +444,20 @@ async def voice_turn(
         )
         await db.commit()
 
+        latency_ms = round((_time.monotonic() - t0) * 1000, 2)
+        metrics.inc("voice_turns")
+        metrics.inc("voice_fallbacks")
+        metrics.record_latency("voice_turn_ms", latency_ms)
+        _slog.info(
+            "voice_turn_fallback",
+            request_id=rid,
+            session_id=state.session_id,
+            intent="unknown",
+            outcome=action_taken,
+            latency_ms=latency_ms,
+            consecutive_fallbacks=consecutive,
+        )
+
         return VoiceTurnResponse(
             session_id=state.session_id,
             turn_number=state.turns,
@@ -452,6 +510,20 @@ async def voice_turn(
         data=data,
     )
     await db.commit()
+
+    latency_ms = round((_time.monotonic() - t0) * 1000, 2)
+    resolved_intent = (state.current_intent or VoiceIntent.unknown).value
+    metrics.inc("voice_turns")
+    metrics.inc(f"intent_{resolved_intent}")
+    metrics.record_latency("voice_turn_ms", latency_ms)
+    _slog.info(
+        "voice_turn_processed",
+        request_id=rid,
+        session_id=state.session_id,
+        intent=resolved_intent,
+        outcome=action_taken,
+        latency_ms=latency_ms,
+    )
 
     return VoiceTurnResponse(
         session_id=state.session_id,
@@ -572,6 +644,7 @@ async def _handle_book(
     await db.refresh(booking)
 
     state.update_draft(employee_id=employee_id, employee_name=employee_name)
+    metrics.inc("bookings_created")
 
     return (
         f"Parfait ! Votre rendez-vous est confirmé : {draft.service_label or draft.service_id} "
@@ -676,6 +749,7 @@ async def _handle_cancel(
 
     booking.status = BookingStatus.cancelled
     await db.commit()
+    metrics.inc("bookings_cancelled")
 
     return (
         f"Votre réservation #{booking_id} a été annulée. "

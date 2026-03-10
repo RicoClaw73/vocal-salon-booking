@@ -28,6 +28,7 @@ from collections import defaultdict
 from fastapi import Depends, HTTPException, Request
 
 from app.config import settings
+from app.observability import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ async def rate_limit_dependency(request: Request) -> None:
 
     if count >= limit:
         logger.warning("Rate limit exceeded for %s (%d/%d)", client_ip, count, limit)
+        metrics.inc("rate_limit_hits")
         raise HTTPException(
             status_code=429,
             detail="Rate limit exceeded. Please try again later.",
