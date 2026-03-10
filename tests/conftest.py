@@ -23,6 +23,7 @@ from app.models import Base
 from app.observability import metrics
 from app.rate_limit import _reset_buckets
 from app.seed import seed_all
+from app.telephony_adapter import idempotency_guard
 
 # ── In-memory test engine ───────────────────────────────────
 
@@ -49,6 +50,7 @@ async def setup_db():
     metrics.reset()
     stt_circuit_breaker.reset()
     tts_circuit_breaker.reset()
+    idempotency_guard.reset()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with test_session_factory() as session:
