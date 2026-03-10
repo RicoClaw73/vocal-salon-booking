@@ -6,6 +6,7 @@ POST /voice/sessions/message  – process a transcribed user utterance
 POST /voice/sessions/end      – close a voice session
 POST /voice/turn              – Phase 3: unified voice turn orchestration
                                 (STT → intent → conversation → TTS)
+GET  /voice/sessions/{id}/transcript – Phase 4.2: fetch session state for review
 
 These endpoints form the integration layer between a local STT/TTS pipeline
 and the existing salon booking API.  No external services required.
@@ -626,6 +627,36 @@ async def _handle_unknown(
         None,
         None,
     )
+
+
+# ── Phase 4.2: Session transcript / state review ─────────────
+
+
+@router.get("/sessions/{session_id}/transcript")
+async def get_session_transcript(session_id: str) -> dict:
+    """
+    Fetch the current state of a voice session for demo review.
+
+    Returns session metadata, booking draft, and lifecycle info.
+    Useful for inspecting conversation state during or after a demo run.
+    """
+    state = conversation_manager.get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' introuvable.")
+
+    return {
+        "session_id": state.session_id,
+        "status": state.status.value,
+        "current_intent": state.current_intent.value if state.current_intent else None,
+        "turns": state.turns,
+        "booking_draft": state.booking_draft.model_dump(),
+        "client_name": state.client_name,
+        "client_phone": state.client_phone,
+        "channel": state.channel,
+        "created_at": state.created_at.isoformat(),
+        "last_activity": state.last_activity.isoformat(),
+        "duration_seconds": state.duration_seconds,
+    }
 
 
 # ── Handler dispatch table ───────────────────────────────────
