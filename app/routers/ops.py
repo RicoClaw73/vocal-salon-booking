@@ -25,9 +25,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth import require_api_key
+from app.config import settings
 from app.database import get_db
 from app.models import Booking, BookingStatus, TranscriptEvent, VoiceSession
 from app.observability import metrics
+from app.providers import check_provider_readiness
+from app.smoke_test import run_smoke_test
 
 router = APIRouter(
     prefix="/ops",
@@ -47,6 +50,35 @@ async def get_metrics() -> dict:
     and latency statistics (min/max/avg voice turn processing time).
     """
     return metrics.snapshot()
+
+
+# ── Provider Readiness (Phase 5.1) ─────────────────────────────
+
+
+@router.get("/providers/status")
+async def provider_status() -> dict:
+    """Report STT/TTS provider readiness state.
+
+    Shows which providers are configured, whether credentials are present,
+    and whether the system has fallen back to mock.  No secrets are exposed.
+    """
+    return check_provider_readiness(
+        stt_requested=settings.STT_PROVIDER,
+        stt_api_key=settings.STT_API_KEY,
+        tts_requested=settings.TTS_PROVIDER,
+        tts_api_key=settings.TTS_API_KEY,
+    )
+
+
+@router.post("/providers/smoke-test")
+async def provider_smoke_test() -> dict:
+    """Run a lightweight smoke test against the configured providers.
+
+    Sends a silence clip through STT and a short sentence through TTS,
+    returning latency, success, and any error classification.
+    Safe to call in production — uses tiny payloads.
+    """
+    return await run_smoke_test()
 
 
 # ── Recent Sessions ─────────────────────────────────────────────

@@ -160,3 +160,7 @@ class VoiceTurnResponse(BaseModel):
     tts_meta: AudioMeta | None = Field(
         None, description="TTS output audio metadata"
     )
+    provider_errors: list[dict] | None = Field(
+        None,
+        description="Provider error details if fallback/errors occurred (Phase 5.1)",
+    )

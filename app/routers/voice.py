@@ -38,7 +38,18 @@ from app.database import get_db
 from app.intent import extract_intent
 from app.models import Booking, BookingStatus, Service
 from app.observability import StructuredLogger, metrics, new_request_id
-from app.providers import STTProvider, TTSProvider, get_stt_provider, get_tts_provider
+from app.providers import (
+    MockSTTProvider,
+    MockTTSProvider,
+    ProviderErrorKind,
+    ProviderOutcome,
+    STTProvider,
+    TTSProvider,
+    get_stt_provider,
+    get_tts_provider,
+    safe_synthesize,
+    safe_transcribe,
+)
 from app.rate_limit import rate_limit_dependency
 from app.session_store import (
     append_transcript_event,
@@ -140,6 +151,50 @@ def _init_tts_provider() -> TTSProvider:
 
 _stt_provider: STTProvider = _init_stt_provider()
 _tts_provider: TTSProvider = _init_tts_provider()
+# Keep mock instances for automatic fallback when real providers fail at runtime.
+_stt_fallback: STTProvider = MockSTTProvider()
+_tts_fallback: TTSProvider = MockTTSProvider()
+
+
+def _record_provider_outcome(
+    role: str, outcome: ProviderOutcome, rid: str, session_id: str,
+) -> None:
+    """Emit structured log + metrics for a provider call outcome."""
+    if outcome.fallback_used:
+        metrics.inc(f"provider_{role}_fallback")
+        _slog.warning(
+            f"provider_{role}_fallback",
+            request_id=rid,
+            session_id=session_id,
+            error_kind=outcome.error_kind.value if outcome.error_kind else None,
+            error_detail=outcome.error_detail,
+        )
+    elif outcome.error_kind and not outcome.success:
+        metrics.inc(f"provider_{role}_error")
+        metrics.inc(f"provider_{role}_{outcome.error_kind.value}")
+        _slog.error(
+            f"provider_{role}_error",
+            request_id=rid,
+            session_id=session_id,
+            error_kind=outcome.error_kind.value,
+            error_detail=outcome.error_detail,
+        )
+
+
+def _collect_provider_errors(
+    *outcomes: tuple[str, ProviderOutcome],
+) -> list[dict] | None:
+    """Gather non-success outcomes into a serialisable list (or None)."""
+    errors = []
+    for role, o in outcomes:
+        if o.error_kind is not None:
+            errors.append({
+                "role": role,
+                "error_kind": o.error_kind.value,
+                "error_detail": o.error_detail,
+                "fallback_used": o.fallback_used,
+            })
+    return errors or None
 
 
 # ── Session helpers (DB-backed + in-memory cache) ────────────
@@ -382,11 +437,14 @@ async def voice_turn(
             detail="Provide either 'text' or 'mock_transcript'.",
         )
 
-    # 3. Mock STT step (in real pipeline: transcribe audio_bytes)
-    stt_result = await _stt_provider.transcribe(
+    # 3. STT step (with error classification + auto-fallback)
+    stt_result, stt_outcome = await safe_transcribe(
+        _stt_provider,
         audio_bytes=user_text.encode("utf-8"),
         language="fr",
+        fallback=_stt_fallback,
     )
+    _record_provider_outcome("stt", stt_outcome, rid, state.session_id)
     stt_meta = AudioMeta(
         format="wav",
         duration_ms=stt_result.duration_ms,
@@ -420,8 +478,11 @@ async def voice_turn(
             response_text = _FALLBACK_RESPONSES[idx]
             action_taken = "fallback"
 
-        # Generate TTS for fallback
-        tts_result = await _tts_provider.synthesize(response_text, language="fr")
+        # Generate TTS for fallback (with error classification)
+        tts_result, tts_outcome = await safe_synthesize(
+            _tts_provider, response_text, language="fr", fallback=_tts_fallback,
+        )
+        _record_provider_outcome("tts", tts_outcome, rid, state.session_id)
         tts_meta = AudioMeta(
             format=tts_result.audio_format.value,
             duration_ms=tts_result.duration_ms,
@@ -470,6 +531,9 @@ async def voice_turn(
             data=None,
             stt_meta=stt_meta,
             tts_meta=tts_meta,
+            provider_errors=_collect_provider_errors(
+                ("stt", stt_outcome), ("tts", tts_outcome),
+            ),
         )
 
     # Reset consecutive fallback counter on successful intent
@@ -486,8 +550,11 @@ async def voice_turn(
     handler = _INTENT_HANDLERS.get(state.current_intent or VoiceIntent.unknown, _handle_unknown)
     response_text, action_taken, data = await handler(state, entities, db)
 
-    # 9. TTS synthesis
-    tts_result = await _tts_provider.synthesize(response_text, language="fr")
+    # 9. TTS synthesis (with error classification + auto-fallback)
+    tts_result, tts_outcome = await safe_synthesize(
+        _tts_provider, response_text, language="fr", fallback=_tts_fallback,
+    )
+    _record_provider_outcome("tts", tts_outcome, rid, state.session_id)
     tts_meta = AudioMeta(
         format=tts_result.audio_format.value,
         duration_ms=tts_result.duration_ms,
@@ -537,6 +604,9 @@ async def voice_turn(
         data=data,
         stt_meta=stt_meta,
         tts_meta=tts_meta,
+        provider_errors=_collect_provider_errors(
+            ("stt", stt_outcome), ("tts", tts_outcome),
+        ),
     )
 
 
