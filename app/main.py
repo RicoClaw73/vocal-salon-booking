@@ -19,7 +19,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import async_session, engine
 from app.models import Base
-from app.routers import availability, bookings, employees, services
+from app.routers import availability, bookings, employees, services, voice
 from app.schemas import HealthOut
 from app.seed import seed_all
 
@@ -57,6 +57,7 @@ app.include_router(services.router, prefix=API_PREFIX)
 app.include_router(employees.router, prefix=API_PREFIX)
 app.include_router(availability.router, prefix=API_PREFIX)
 app.include_router(bookings.router, prefix=API_PREFIX)
+app.include_router(voice.router, prefix=API_PREFIX)
 
 
 # ── Health ──────────────────────────────────────────────────
