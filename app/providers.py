@@ -22,10 +22,32 @@ from __future__ import annotations
 import hashlib
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# ── Provider Error Classification (Phase 5.1) ─────────────
+
+
+class ProviderErrorKind(str, Enum):
+    """Classified error categories for provider failures."""
+    config_missing = "config_missing"        # Credentials absent / provider unknown
+    provider_timeout = "provider_timeout"    # Network timeout from real provider
+    provider_http_error = "provider_http_error"  # Non-2xx HTTP from real provider
+    provider_error = "provider_error"        # Other provider runtime error
+    fallback_used = "fallback_used"          # Fell back to mock successfully
+
+
+@dataclass
+class ProviderOutcome:
+    """Result wrapper carrying success/failure classification alongside data."""
+    success: bool
+    error_kind: ProviderErrorKind | None = None
+    error_detail: str = ""
+    fallback_used: bool = False
 
 
 # ── Data types ──────────────────────────────────────────────
@@ -406,7 +428,7 @@ def get_stt_provider(provider: str = "mock", **kwargs) -> STTProvider:
         return MockSTTProvider()
 
     # Filter kwargs to only those the constructor accepts
-    return cls(**{k: v for k, v in kwargs.items() if v})
+    return cls(**{k: v for k, v in kwargs.items() if v})  # noqa: E501 (stt)
 
 
 def get_tts_provider(provider: str = "mock", **kwargs) -> TTSProvider:
@@ -440,3 +462,152 @@ def get_tts_provider(provider: str = "mock", **kwargs) -> TTSProvider:
         return MockTTSProvider()
 
     return cls(**{k: v for k, v in kwargs.items() if v})
+
+
+# ── Provider Readiness (Phase 5.1) ─────────────────────────
+
+
+@dataclass(frozen=True)
+class ProviderStatus:
+    """Readiness status for a single provider slot (STT or TTS)."""
+    role: str               # "stt" or "tts"
+    requested: str          # provider name from config
+    active: str             # provider actually in use (may be "mock" after fallback)
+    credentials_present: bool
+    is_fallback: bool       # True if active != requested (fell back to mock)
+    ready: bool             # True if active provider is ready (credentials OK or mock)
+
+
+def check_provider_readiness(
+    *,
+    stt_requested: str = "mock",
+    stt_api_key: str = "",
+    tts_requested: str = "mock",
+    tts_api_key: str = "",
+) -> dict:
+    """
+    Check provider readiness without side effects.
+
+    Returns a dict with per-provider status and an overall ``all_ready`` flag.
+    Used by the ``/ops/providers/status`` endpoint and the CLI smoke-test.
+    """
+    statuses: list[dict] = []
+
+    for role, requested, api_key, registry in [
+        ("stt", stt_requested, stt_api_key, _STT_REGISTRY),
+        ("tts", tts_requested, tts_api_key, _TTS_REGISTRY),
+    ]:
+        entry = registry.get(requested)
+        creds_present = bool(api_key)
+        if not entry:
+            # Unknown provider → will fall back to mock
+            statuses.append(ProviderStatus(
+                role=role, requested=requested, active="mock",
+                credentials_present=creds_present, is_fallback=True, ready=True,
+            ).__dict__)
+            continue
+
+        _cls, required = entry
+        missing = _check_required({"api_key": api_key}, required)
+        fell_back = bool(missing)
+        active = "mock" if fell_back else requested
+        statuses.append(ProviderStatus(
+            role=role, requested=requested, active=active,
+            credentials_present=creds_present, is_fallback=fell_back,
+            ready=not fell_back or requested == "mock",
+        ).__dict__)
+
+    all_ready = all(s["ready"] for s in statuses)
+    return {"providers": statuses, "all_ready": all_ready}
+
+
+# ── Safe provider wrappers (Phase 5.1) ─────────────────────
+
+
+def _classify_exception(exc: Exception) -> tuple[ProviderErrorKind, str]:
+    """Map an exception to a ``ProviderErrorKind`` and a human-readable detail."""
+    # httpx timeout
+    try:
+        import httpx
+        if isinstance(exc, httpx.TimeoutException):
+            return ProviderErrorKind.provider_timeout, str(exc)
+        if isinstance(exc, httpx.HTTPStatusError):
+            status = exc.response.status_code
+            return (
+                ProviderErrorKind.provider_http_error,
+                f"HTTP {status}: {exc.response.text[:200]}",
+            )
+    except ImportError:
+        pass
+    return ProviderErrorKind.provider_error, str(exc)[:300]
+
+
+async def safe_transcribe(
+    provider: STTProvider,
+    audio_bytes: bytes,
+    audio_format: AudioFormat = AudioFormat.wav,
+    language: str = "fr",
+    *,
+    fallback: STTProvider | None = None,
+) -> tuple[STTResult, ProviderOutcome]:
+    """
+    Call ``provider.transcribe`` with error classification.
+
+    If the call fails and *fallback* is given, retries with the fallback
+    provider and sets ``outcome.fallback_used = True``.
+    """
+    try:
+        result = await provider.transcribe(audio_bytes, audio_format, language)
+        return result, ProviderOutcome(success=True)
+    except Exception as exc:
+        kind, detail = _classify_exception(exc)
+        logger.error(
+            "STT provider '%s' failed (%s): %s",
+            provider.provider_name, kind.value, detail,
+        )
+        if fallback is not None:
+            fb_result = await fallback.transcribe(audio_bytes, audio_format, language)
+            return fb_result, ProviderOutcome(
+                success=True, error_kind=kind, error_detail=detail,
+                fallback_used=True,
+            )
+        return STTResult(
+            transcript="", confidence=0.0, language=language,
+            duration_ms=0, provider="error",
+        ), ProviderOutcome(success=False, error_kind=kind, error_detail=detail)
+
+
+async def safe_synthesize(
+    provider: TTSProvider,
+    text: str,
+    language: str = "fr",
+    voice_id: str | None = None,
+    *,
+    fallback: TTSProvider | None = None,
+) -> tuple[TTSResult, ProviderOutcome]:
+    """
+    Call ``provider.synthesize`` with error classification.
+
+    If the call fails and *fallback* is given, retries with the fallback
+    provider and sets ``outcome.fallback_used = True``.
+    """
+    try:
+        result = await provider.synthesize(text, language, voice_id)
+        return result, ProviderOutcome(success=True)
+    except Exception as exc:
+        kind, detail = _classify_exception(exc)
+        logger.error(
+            "TTS provider '%s' failed (%s): %s",
+            provider.provider_name, kind.value, detail,
+        )
+        if fallback is not None:
+            fb_result = await fallback.synthesize(text, language, voice_id)
+            return fb_result, ProviderOutcome(
+                success=True, error_kind=kind, error_detail=detail,
+                fallback_used=True,
+            )
+        text_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
+        return TTSResult(
+            audio_url=None, audio_format=AudioFormat.wav, duration_ms=0,
+            sample_rate=22050, provider="error", text_hash=text_hash,
+        ), ProviderOutcome(success=False, error_kind=kind, error_detail=detail)
