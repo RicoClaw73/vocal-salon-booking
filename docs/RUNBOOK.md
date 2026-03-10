@@ -354,7 +354,154 @@ uv run python -m pytest tests/test_health.py -v
 
 ---
 
-## 8. Monitoring Checklist (Daily Pilot)
+## 8. Telephony Integration Pilot (Phase 5.3)
+
+### 8.1 Configuration
+
+Add to `.env` to enable the telephony pilot:
+
+```bash
+# Enable telephony event ingestion (default: false)
+TELEPHONY_ENABLED=true
+
+# Dry-run mode: process events but suppress outbound side-effects (default: true)
+TELEPHONY_DRY_RUN=true
+
+# Adapter provider: local (simulated), twilio, vapi (default: local)
+TELEPHONY_PROVIDER=local
+
+# Webhook signature verification secret (empty = disabled, default: empty)
+TELEPHONY_WEBHOOK_SECRET=
+
+# Max inbound payload size in bytes (default: 256000)
+TELEPHONY_MAX_PAYLOAD_BYTES=256000
+
+# Event ID retention TTL in hours for idempotency guard (default: 24)
+TELEPHONY_EVENT_TTL_HOURS=24
+```
+
+### 8.2 Telephony Endpoints
+
+| Endpoint                               | Method | Purpose                                    |
+|----------------------------------------|--------|--------------------------------------------|
+| `/api/v1/telephony/inbound`            | POST   | Primary webhook — accepts call events      |
+| `/api/v1/telephony/status`             | GET    | Pilot status, counters, adapter info       |
+| `/api/v1/telephony/retention/prune`    | POST   | Manual prune of expired event IDs          |
+
+### 8.3 Inbound Event Format (Local Adapter)
+
+```bash
+# Start a call
+curl -s -X POST http://localhost:8000/api/v1/telephony/inbound \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "call.started",
+    "event_id": "evt-001",
+    "caller_number": "+33612345678",
+    "caller_name": "Marie Dupont",
+    "channel": "phone"
+  }' | python -m json.tool
+
+# Send an utterance (requires session_id from call.started response)
+curl -s -X POST http://localhost:8000/api/v1/telephony/inbound \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "utterance",
+    "event_id": "evt-002",
+    "session_id": "<session_id>",
+    "transcript": "Je voudrais prendre rendez-vous pour une coupe"
+  }' | python -m json.tool
+
+# End a call
+curl -s -X POST http://localhost:8000/api/v1/telephony/inbound \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "call.ended",
+    "event_id": "evt-003",
+    "session_id": "<session_id>",
+    "reason": "user_hangup"
+  }' | python -m json.tool
+```
+
+### 8.4 Twilio Adapter Payload Format
+
+When `TELEPHONY_PROVIDER=twilio`, send Twilio-style webhook payloads:
+
+```json
+{
+  "CallSid": "CA12345678",
+  "CallStatus": "ringing",
+  "From": "+33612345678",
+  "CallerName": "Marie Dupont"
+}
+```
+
+### 8.5 Pilot Dry-Run Mode
+
+When `TELEPHONY_DRY_RUN=true`:
+- Events are fully processed through the voice pipeline (intent detection, booking logic)
+- Sessions are created and persisted in the database
+- **No outbound side-effects** (TTS audio delivery, webhook callbacks) are performed
+- All responses include `"dry_run": true` for easy identification
+- Use this for shadow validation before going live
+
+### 8.6 Idempotency & Replay Protection
+
+- Every inbound event must carry a unique `event_id` (auto-generated if missing)
+- Duplicate `event_id`s within the TTL window (default: 24h) are rejected with `"status": "duplicate"`
+- The idempotency guard is in-memory and resets on process restart
+- Manual cleanup: `POST /api/v1/telephony/retention/prune`
+
+### 8.7 Payload Guardrails
+
+- Max payload size enforced via `TELEPHONY_MAX_PAYLOAD_BYTES` (default: 250 KB)
+- Oversized payloads return HTTP 413
+- Invalid JSON returns HTTP 400
+- Malformed event structure returns HTTP 422
+- Webhook signature validation when `TELEPHONY_WEBHOOK_SECRET` is set
+
+### 8.8 Safety Checklist — Telephony Pilot Go-Live
+
+- [ ] Set `TELEPHONY_ENABLED=true` in `.env`
+- [ ] Start with `TELEPHONY_DRY_RUN=true` for shadow validation
+- [ ] Verify `/api/v1/telephony/status` shows correct configuration
+- [ ] Send test events via local adapter and verify responses
+- [ ] Check `/api/v1/ops/metrics` for `telephony_*` counters
+- [ ] Verify idempotency: send same `event_id` twice, confirm second returns `duplicate`
+- [ ] Verify payload guardrails: send oversized payload, confirm 413
+- [ ] Review session data in `/api/v1/ops/sessions/recent`
+- [ ] When ready: set `TELEPHONY_DRY_RUN=false` for live operation
+- [ ] Monitor `telephony_events_received` / `telephony_utterances_processed` counters
+- [ ] Watch for `telephony_parse_error` or `telephony_payload_rejected` spikes
+
+### 8.9 Telephony-Specific Metrics
+
+| Metric                            | Meaning                                     |
+|-----------------------------------|---------------------------------------------|
+| `telephony_events_received`       | Total inbound events processed              |
+| `telephony_calls_started`         | Call sessions initiated via telephony        |
+| `telephony_calls_ended`           | Call sessions ended via telephony            |
+| `telephony_utterances_processed`  | Utterance events processed                  |
+| `telephony_event_replay_rejected` | Duplicate events rejected by idempotency    |
+| `telephony_payload_rejected`      | Oversized payloads rejected                 |
+| `telephony_payload_invalid`       | Invalid JSON payloads rejected              |
+| `telephony_parse_error`           | Malformed event payloads rejected           |
+| `telephony_signature_invalid`     | Failed webhook signature validations        |
+| `telephony_event_ms`              | End-to-end event processing latency         |
+
+### 8.10 Running Telephony Tests
+
+```bash
+# Telephony adapter + router tests (53 tests)
+uv run python -m pytest tests/test_telephony_adapter.py -v
+
+# Full test suite (328+ tests)
+uv run python -m pytest tests/ -v
+```
+
+---
+
+## 9. Monitoring Checklist (Daily Pilot)
 
 - [ ] `/health` returns `status: ok`, `database: ok`
 - [ ] Fallback rate < 20% (`/ops/metrics` → voice_fallbacks / voice_turns)
@@ -365,3 +512,7 @@ uv run python -m pytest tests/test_health.py -v
 - [ ] Circuit breakers closed (`/ops/providers/status` → state: "closed")
 - [ ] No `cb_*_tripped` spikes in metrics
 - [ ] TTS artifact directory not filling up excessively (clean up old sessions)
+- [ ] Telephony: `/api/v1/telephony/status` shows expected config (Phase 5.3)
+- [ ] Telephony: No `telephony_parse_error` or `telephony_signature_invalid` spikes
+- [ ] Telephony: Idempotency guard size reasonable (< 50k; prune if needed)
+- [ ] Telephony: `telephony_event_ms` latency acceptable (< 500ms)

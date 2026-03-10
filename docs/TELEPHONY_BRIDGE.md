@@ -161,6 +161,56 @@ sim = TelephonySimulator(client=async_test_client)
 results = await sim.run(scenario_booking_flow())
 ```
 
+## Telephony Adapter Layer (Phase 5.3)
+
+Phase 5.3 adds a **provider-agnostic telephony adapter** abstraction that sits
+between external telephony webhooks and the existing voice pipeline:
+
+```
+Telephony Provider (Twilio/Vapi/etc.)
+    ↓ webhook POST
+POST /api/v1/telephony/inbound
+    ↓ payload guardrails (size, JSON validity)
+    ↓ signature verification
+    ↓ adapter.parse_inbound(raw_payload) → InboundCallEvent
+    ↓ idempotency guard (event_id dedup)
+    ↓ route through existing voice pipeline
+    ↓ adapter.format_outbound(response) → provider-specific response
+    ← JSON response
+```
+
+### Available Adapters
+
+| Adapter     | `TELEPHONY_PROVIDER` | Description                       |
+|-------------|---------------------|-----------------------------------|
+| **Local**   | `local` (default)   | Simulated, no credentials needed  |
+| **Twilio**  | `twilio`            | Twilio webhook contract scaffold  |
+| **Vapi**    | `vapi`              | Vapi webhook contract scaffold    |
+
+### Pilot Controls
+
+| Setting                       | Default  | Purpose                                     |
+|-------------------------------|----------|---------------------------------------------|
+| `TELEPHONY_ENABLED`           | `false`  | Gate: enable/disable all event ingestion     |
+| `TELEPHONY_DRY_RUN`           | `true`   | Process events but suppress outbound effects |
+| `TELEPHONY_WEBHOOK_SECRET`    | *(empty)*| Webhook signature verification secret        |
+| `TELEPHONY_MAX_PAYLOAD_BYTES` | `256000` | Max inbound payload size (bytes)             |
+| `TELEPHONY_EVENT_TTL_HOURS`   | `24`     | Idempotency guard event ID retention         |
+
+### Idempotency / Replay Protection
+
+Every inbound event carries an `event_id`.  The idempotency guard tracks
+processed IDs in memory and rejects duplicates within the TTL window.
+Expired IDs are pruned automatically.  Manual prune: `POST /telephony/retention/prune`.
+
+### Key Files
+
+| File                          | Purpose                                    |
+|-------------------------------|--------------------------------------------|
+| `app/telephony_adapter.py`    | Adapter abstractions + 3 concrete adapters |
+| `app/routers/telephony.py`    | Webhook endpoint + pilot controls          |
+| `tests/test_telephony_adapter.py` | 53 tests (unit + integration)          |
+
 ## Bridge Implementation Notes
 
 When building a real telephony bridge:
@@ -174,3 +224,9 @@ When building a real telephony bridge:
 5. **DTMF**: Forward DTMF digits as `[DTMF: 123]` text in `/voice/turn`.
 6. **Error handling**: Check `provider_errors` in responses; log and alert
    if `fallback_used` is `true` in production.
+7. **Adapter selection** (Phase 5.3): Use `/api/v1/telephony/inbound` with
+   the appropriate adapter (`TELEPHONY_PROVIDER=twilio|vapi|local`).
+8. **Idempotency**: Always send a unique `event_id` per webhook delivery.
+   Retries with the same ID are safely rejected.
+9. **Dry-run**: Start with `TELEPHONY_DRY_RUN=true` to validate integration
+   without side effects before going live.
