@@ -47,15 +47,24 @@ projects/vocal-salon-portfolio/
 │   ├── database.py                        ← Async SQLAlchemy engine & session
 │   ├── models.py                          ← ORM models (Service, Employee, Booking)
 │   ├── schemas.py                         ← Pydantic v2 request/response
+│   ├── voice_schemas.py                   ← Voice pipeline Pydantic models
+│   ├── intent.py                          ← Deterministic intent extraction
+│   ├── conversation.py                    ← In-memory voice session state
+│   ├── providers.py                       ← STT/TTS provider abstractions (Phase 4.1)
 │   ├── slot_engine.py                     ← Availability & conflict logic
 │   ├── seed.py                            ← DB seeder from JSON data
 │   ├── main.py                            ← FastAPI app entrypoint
+│   ├── demo/                              ← Phase 4.2: E2E demo flow package
+│   │   ├── scenarios.py                   ← 3 scenario fixtures + loaders
+│   │   ├── orchestrator.py                ← Demo runner + artifact generation
+│   │   └── __main__.py                    ← CLI: python -m app.demo
 │   └── routers/
 │       ├── services.py                    ← GET /services
 │       ├── employees.py                   ← GET /employees
 │       ├── availability.py                ← GET /availability/search
-│       └── bookings.py                    ← POST/GET/PATCH/DELETE /bookings
-└── tests/                                 ← pytest async test suite (26 tests)
+│       ├── bookings.py                    ← POST/GET/PATCH/DELETE /bookings
+│       └── voice.py                       ← Voice pipeline + transcript endpoint
+└── tests/                                 ← pytest async test suite (164 tests)
 ```
 
 ## Stack technique prévue
@@ -95,10 +104,12 @@ Le catalogue est construit à partir de **12 sources web** couvrant 7 salons par
 | Phase | Description | Statut |
 |---|---|---|
 | **Phase 0** | Fondations, benchmark, architecture | ✅ Fait |
-| **Phase 1** | API de réservation (FastAPI + SQLite/PostgreSQL) | ✅ MVP |
-| **Phase 2** | Pipeline vocal (STT + LLM + TTS) | 🔜 |
-| **Phase 3** | Intégration et tests end-to-end | 🔜 |
-| **Phase 4** | Polish, vidéo démo, landing page | 🔜 |
+| **Phase 1** | API de réservation (FastAPI + SQLite/PostgreSQL) | ✅ Fait |
+| **Phase 2** | Pipeline vocal (intent + conversation + handlers) | ✅ Fait |
+| **Phase 3** | Voice turn orchestration (STT → Intent → TTS loop) | ✅ Fait |
+| **Phase 4.1** | Provider abstraction (mock ↔ real STT/TTS bridge) | ✅ Fait |
+| **Phase 4.2** | E2E demo flow (orchestrator, fixtures, artifacts) | ✅ Fait |
+| **Phase 5** | Polish, vidéo démo, landing page | 🔜 |
 
 Voir [`docs/PLAN_DE_BATAILLE.md`](docs/PLAN_DE_BATAILLE.md) pour le détail.
 
@@ -133,6 +144,29 @@ pytest tests/ -v
 | `GET` | `/api/v1/bookings/{id}` | Get booking |
 | `PATCH` | `/api/v1/bookings/{id}` | Reschedule booking |
 | `DELETE` | `/api/v1/bookings/{id}` | Cancel booking |
+| `POST` | `/api/v1/voice/sessions/start` | Open voice session |
+| `POST` | `/api/v1/voice/sessions/message` | Process user utterance |
+| `POST` | `/api/v1/voice/sessions/end` | Close voice session |
+| `POST` | `/api/v1/voice/turn` | Full STT → Intent → TTS turn |
+| `GET` | `/api/v1/voice/sessions/{id}/transcript` | Session state for demo review |
+
+### Demo Flow (Phase 4.2)
+
+```bash
+# Run all 3 demo scenarios against a live server
+python -m app.demo
+
+# Run a specific scenario
+python -m app.demo happy_path_booking
+
+# List available scenarios
+python -m app.demo --list
+
+# Run demos via test suite (no server needed)
+pytest tests/test_demo.py -v
+```
+
+See [`docs/PHASE4_2_DEMO_FLOW.md`](docs/PHASE4_2_DEMO_FLOW.md) for full details.
 
 ### Environment Variables
 
@@ -140,6 +174,10 @@ pytest tests/ -v
 |---|---|---|
 | `DATABASE_URL` | `sqlite+aiosqlite:///salon.db` | Async DB URL (SQLite or PostgreSQL) |
 | `DEBUG` | `true` | Enable SQL echo logging |
+| `STT_PROVIDER` | `mock` | STT provider: `mock`, `deepgram` |
+| `STT_API_KEY` | *(empty)* | Deepgram API key (mock fallback if empty) |
+| `TTS_PROVIDER` | `mock` | TTS provider: `mock`, `elevenlabs` |
+| `TTS_API_KEY` | *(empty)* | ElevenLabs API key (mock fallback if empty) |
 
 ## Outils n8n intégrés pour agents de code
 
