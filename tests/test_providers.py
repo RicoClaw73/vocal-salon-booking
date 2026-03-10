@@ -1,11 +1,27 @@
-"""Tests for STT/TTS provider abstractions (app.providers)."""
+"""Tests for STT/TTS provider abstractions (app.providers).
+
+Phase 3 coverage (preserved):
+  - MockSTTProvider / MockTTSProvider behaviour
+  - Factory produces mock providers
+
+Phase 4 additions:
+  - Factory fallback: unknown provider → mock (with warning)
+  - Factory fallback: real provider requested without credentials → mock
+  - Real-provider adapter scaffolds are registered and instantiable
+  - DeepgramSTTProvider / ElevenLabsTTSProvider basic unit tests
+  - Config-driven provider selection via get_stt/tts_provider
+"""
 
 from __future__ import annotations
+
+import logging
 
 import pytest
 
 from app.providers import (
     AudioFormat,
+    DeepgramSTTProvider,
+    ElevenLabsTTSProvider,
     MockSTTProvider,
     MockTTSProvider,
     STTProvider,
@@ -13,6 +29,9 @@ from app.providers import (
     get_stt_provider,
     get_tts_provider,
 )
+
+
+# ── MockSTTProvider (Phase 3 — unchanged) ──────────────────
 
 
 class TestMockSTTProvider:
@@ -45,6 +64,9 @@ class TestMockSTTProvider:
         assert MockSTTProvider().provider_name == "mock"
 
 
+# ── MockTTSProvider (Phase 3 — unchanged) ──────────────────
+
+
 class TestMockTTSProvider:
 
     @pytest.mark.asyncio
@@ -70,6 +92,9 @@ class TestMockTTSProvider:
         assert MockTTSProvider().provider_name == "mock"
 
 
+# ── Factory — basic (Phase 3 — unchanged) ──────────────────
+
+
 class TestProviderFactory:
 
     def test_get_stt_mock(self):
@@ -82,10 +107,118 @@ class TestProviderFactory:
         assert isinstance(provider, TTSProvider)
         assert provider.provider_name == "mock"
 
-    def test_get_stt_unknown_raises(self):
-        with pytest.raises(ValueError, match="Unknown STT provider"):
-            get_stt_provider("whisper")
 
-    def test_get_tts_unknown_raises(self):
-        with pytest.raises(ValueError, match="Unknown TTS provider"):
-            get_tts_provider("elevenlabs")
+# ── Factory — fallback logic (Phase 4) ─────────────────────
+
+
+class TestProviderFallback:
+    """Factory falls back to mock when credentials are missing or provider is unknown."""
+
+    def test_stt_unknown_provider_falls_back_to_mock(self, caplog):
+        """Unknown provider name → mock + warning (not ValueError)."""
+        with caplog.at_level(logging.WARNING, logger="app.providers"):
+            provider = get_stt_provider("nonexistent_provider")
+        assert isinstance(provider, MockSTTProvider)
+        assert provider.provider_name == "mock"
+        assert "Unknown STT provider" in caplog.text
+
+    def test_tts_unknown_provider_falls_back_to_mock(self, caplog):
+        """Unknown provider name → mock + warning (not ValueError)."""
+        with caplog.at_level(logging.WARNING, logger="app.providers"):
+            provider = get_tts_provider("nonexistent_provider")
+        assert isinstance(provider, MockTTSProvider)
+        assert provider.provider_name == "mock"
+        assert "Unknown TTS provider" in caplog.text
+
+    def test_stt_deepgram_without_key_falls_back(self, caplog):
+        """Deepgram requested but no api_key → mock + warning."""
+        with caplog.at_level(logging.WARNING, logger="app.providers"):
+            provider = get_stt_provider("deepgram")
+        assert isinstance(provider, MockSTTProvider)
+        assert "missing credentials" in caplog.text.lower()
+
+    def test_stt_deepgram_with_empty_key_falls_back(self, caplog):
+        """Deepgram requested with empty api_key → mock + warning."""
+        with caplog.at_level(logging.WARNING, logger="app.providers"):
+            provider = get_stt_provider("deepgram", api_key="")
+        assert isinstance(provider, MockSTTProvider)
+        assert "missing credentials" in caplog.text.lower()
+
+    def test_tts_elevenlabs_without_key_falls_back(self, caplog):
+        """ElevenLabs requested but no api_key → mock + warning."""
+        with caplog.at_level(logging.WARNING, logger="app.providers"):
+            provider = get_tts_provider("elevenlabs")
+        assert isinstance(provider, MockTTSProvider)
+        assert "missing credentials" in caplog.text.lower()
+
+    def test_tts_elevenlabs_with_empty_key_falls_back(self, caplog):
+        """ElevenLabs requested with empty api_key → mock + warning."""
+        with caplog.at_level(logging.WARNING, logger="app.providers"):
+            provider = get_tts_provider("elevenlabs", api_key="")
+        assert isinstance(provider, MockTTSProvider)
+        assert "missing credentials" in caplog.text.lower()
+
+
+# ── Real provider instantiation (Phase 4) ──────────────────
+
+
+class TestRealProviderScaffold:
+    """Real providers can be instantiated with credentials (no network calls)."""
+
+    def test_deepgram_stt_instantiates_with_key(self):
+        """Deepgram provider instantiates when api_key is provided."""
+        provider = get_stt_provider("deepgram", api_key="test-key-abc123")
+        assert isinstance(provider, DeepgramSTTProvider)
+        assert provider.provider_name == "deepgram"
+
+    def test_elevenlabs_tts_instantiates_with_key(self):
+        """ElevenLabs provider instantiates when api_key is provided."""
+        provider = get_tts_provider("elevenlabs", api_key="test-key-abc123")
+        assert isinstance(provider, ElevenLabsTTSProvider)
+        assert provider.provider_name == "elevenlabs"
+
+    def test_deepgram_stt_accepts_model_override(self):
+        """Deepgram accepts optional model kwarg."""
+        provider = get_stt_provider("deepgram", api_key="key", model="nova-2-general")
+        assert isinstance(provider, DeepgramSTTProvider)
+
+    def test_elevenlabs_tts_accepts_voice_id(self):
+        """ElevenLabs accepts optional voice_id kwarg."""
+        provider = get_tts_provider(
+            "elevenlabs", api_key="key", voice_id="custom-voice-id"
+        )
+        assert isinstance(provider, ElevenLabsTTSProvider)
+
+    def test_deepgram_is_stt_provider(self):
+        """DeepgramSTTProvider satisfies STTProvider interface."""
+        assert issubclass(DeepgramSTTProvider, STTProvider)
+
+    def test_elevenlabs_is_tts_provider(self):
+        """ElevenLabsTTSProvider satisfies TTSProvider interface."""
+        assert issubclass(ElevenLabsTTSProvider, TTSProvider)
+
+
+# ── Config-driven selection (Phase 4) ──────────────────────
+
+
+class TestConfigDrivenSelection:
+    """Verify that mock default works and real provider selection is seamless."""
+
+    def test_default_provider_is_mock(self):
+        """With no args, factory returns mock."""
+        assert get_stt_provider().provider_name == "mock"
+        assert get_tts_provider().provider_name == "mock"
+
+    def test_mock_explicit(self):
+        """Explicit mock selection works."""
+        stt = get_stt_provider("mock", default_transcript="hello")
+        assert isinstance(stt, MockSTTProvider)
+        tts = get_tts_provider("mock")
+        assert isinstance(tts, MockTTSProvider)
+
+    def test_real_provider_with_credentials_returns_real(self):
+        """When credentials are present, factory returns the real provider."""
+        stt = get_stt_provider("deepgram", api_key="valid-key")
+        assert stt.provider_name == "deepgram"
+        tts = get_tts_provider("elevenlabs", api_key="valid-key")
+        assert tts.provider_name == "elevenlabs"
