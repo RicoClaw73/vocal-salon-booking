@@ -1,0 +1,9 @@
+[submodule "tools/n8n-mcp"]
+	path = tools/n8n-mcp
+	url = https://github.com/czlonkowski/n8n-mcp
+[submodule "tools/n8n-skills"]
+	path = tools/n8n-skills
+	url = https://github.com/czlonkowski/n8n-skills
+[submodule "tools/n8n-mcp-cc-buildier"]
+	path = tools/n8n-mcp-cc-buildier
+	url = https://github.com/czlonkowski/n8n-mcp-cc-buildier
