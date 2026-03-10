@@ -18,6 +18,14 @@ Quand la tâche concerne un **workflow n8n** (création, édition, validation, d
 3. Appliquer les conventions n8n-mcp (formats de nodeType, validation profiles, update partiel itératif, etc.).
 4. Préférer une approche outillée et reproductible (scripts/docs/steps claires) plutôt qu’une réponse abstraite.
 
+## Règle navigateur / debug UI (complémentaire)
+
+Quand la tâche implique un navigateur réel (debug console/network, validation UI, test E2E web), utiliser en complément:
+
+- `tools/chrome-devtools-mcp/`
+
+Ce MCP est secondaire par rapport aux outils n8n pour les tâches purement workflow/backend, mais prioritaire dès qu’un diagnostic navigateur est requis.
+
 ## Priorité d’usage
 
 - Si une info existe déjà dans `tools/n8n-*`, elle est prioritaire sur des hypothèses génériques.

@@ -107,8 +107,9 @@ Le repo inclut des submodules dédiés à n8n dans `tools/` :
 - `tools/n8n-mcp`
 - `tools/n8n-skills`
 - `tools/n8n-mcp-cc-buildier`
+- `tools/chrome-devtools-mcp` (debug navigateur / UI / E2E)
 
-Le fichier `CLAUDE.md` impose leur usage prioritaire pour toute tâche liée aux workflows n8n.
+Le fichier `CLAUDE.md` impose leur usage prioritaire pour toute tâche liée aux workflows n8n, avec `chrome-devtools-mcp` comme complément pour les diagnostics navigateur.
 
 ## Licence
 

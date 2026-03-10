@@ -7,3 +7,6 @@
 [submodule "tools/n8n-mcp-cc-buildier"]
 	path = tools/n8n-mcp-cc-buildier
 	url = https://github.com/czlonkowski/n8n-mcp-cc-buildier
+[submodule "tools/chrome-devtools-mcp"]
+	path = tools/chrome-devtools-mcp
+	url = https://github.com/ChromeDevTools/chrome-devtools-mcp
