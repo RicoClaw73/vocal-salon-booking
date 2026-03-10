@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     TTS_VOICE_ID: str = ""  # Provider-specific voice ID
     TTS_MODEL: str = ""  # Provider-specific model override
 
+    # ── Security / hardening (Phase 4.3) ──────────────────────
+    # Optional API key for voice endpoints.  When empty (default), auth
+    # is disabled — convenient for local dev.  Set to a non-empty string
+    # to require callers to send  X-API-Key: <value>.
+    VOICE_API_KEY: str = ""
+
+    # Rate limiting (in-memory, per-client-IP)
+    RATE_LIMIT_PER_MINUTE: int = 60  # 0 = disabled
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

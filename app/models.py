@@ -2,10 +2,12 @@
 SQLAlchemy ORM models for Maison Éclat salon.
 
 Tables:
-  - services        Catalogue of salon offerings
-  - employees       Staff with schedules and competencies
-  - employee_competencies  M2M link between employees and services
-  - bookings        Client appointments
+  - services              Catalogue of salon offerings
+  - employees             Staff with schedules and competencies
+  - employee_competencies M2M link between employees and services
+  - bookings              Client appointments
+  - voice_sessions        Persistent voice conversation sessions (Phase 4.3)
+  - transcript_events     Per-turn transcript log for voice sessions (Phase 4.3)
 
 Design choices
 --------------
@@ -15,6 +17,8 @@ Design choices
   reference a booking number, not a UUID).
 * Schedules & pauses are stored as JSON columns – they are read-only
   reference data, not queried with WHERE clauses.
+* Voice session state is stored as JSON columns for flexibility;
+  the schema mirrors the in-memory ConversationState dataclass.
 """
 
 from __future__ import annotations
@@ -147,3 +151,67 @@ class Booking(Base):
     # relationships
     employee: Mapped["Employee"] = relationship(back_populates="bookings")
     service: Mapped["Service"] = relationship(back_populates="bookings")
+
+
+# ── Voice Session (Phase 4.3) ──────────────────────────────
+
+class VoiceSession(Base):
+    """
+    Persistent voice conversation session.
+
+    Mirrors the fields of the in-memory ConversationState dataclass so that
+    session state survives process restarts.  Mutable fields (status, turns,
+    current_intent, booking_draft) are updated in-place on every turn.
+    """
+    __tablename__ = "voice_sessions"
+
+    session_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    current_intent: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    booking_draft_json: Mapped[str] = mapped_column(Text, default="{}")
+    turns: Mapped[int] = mapped_column(Integer, default=0)
+    client_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    client_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    channel: Mapped[str] = mapped_column(String(20), default="phone")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    last_activity: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # relationships
+    events: Mapped[list["TranscriptEvent"]] = relationship(
+        back_populates="session",
+        order_by="TranscriptEvent.turn_number",
+        cascade="all, delete-orphan",
+    )
+
+
+class TranscriptEvent(Base):
+    """
+    Single turn in a voice conversation transcript.
+
+    Stored per-turn so the full transcript can be reconstructed after a
+    process restart.  Both user input and assistant response are captured.
+    """
+    __tablename__ = "transcript_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("voice_sessions.session_id"), index=True,
+    )
+    turn_number: Mapped[int] = mapped_column(Integer)
+
+    # User side
+    user_text: Mapped[str] = mapped_column(Text, default="")
+    intent: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Assistant side
+    response_text: Mapped[str] = mapped_column(Text, default="")
+    action_taken: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    is_fallback: Mapped[bool] = mapped_column(Boolean, default=False)
+    data_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # relationships
+    session: Mapped["VoiceSession"] = relationship(back_populates="events")
