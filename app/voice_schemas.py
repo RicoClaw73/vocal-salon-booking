@@ -8,13 +8,17 @@ Defines request/response models for voice session webhook-style events:
 
 These schemas are designed to sit between a local STT/TTS pipeline and the
 existing booking API — no external paid services required.
+
+Phase 5.2: Added audio payload metadata to VoiceTurnRequest (audio_format,
+sample_rate, audio_encoding, audio_content_type) and tts_audio_url to
+VoiceTurnResponse for real audio path readiness.
 """
 
 from __future__ import annotations
 
 import enum
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ── Enums ────────────────────────────────────────────────────
@@ -109,12 +113,21 @@ class AudioMeta(BaseModel):
     provider: str = Field("mock", description="STT/TTS provider used")
 
 
+_VALID_AUDIO_FORMATS = {"wav", "mp3", "ogg", "pcm"}
+_VALID_SAMPLE_RATES = {8000, 16000, 22050, 44100, 48000}
+_VALID_ENCODINGS = {"linear16", "mulaw", "alaw", "opus", "mp3", "ogg_vorbis"}
+
+
 class VoiceTurnRequest(BaseModel):
     """
-    Unified voice turn request — accepts text OR mock transcript payload.
+    Unified voice turn request — accepts text OR audio payload metadata.
 
-    For real pipelines: audio_bytes would be transcribed via STT.
-    For testing/dev: pass text directly and skip STT.
+    **Text-only mode** (backward compat): pass ``text`` or ``mock_transcript``.
+    **Audio mode** (Phase 5.2): pass ``audio_base64`` (base64-encoded audio bytes)
+    along with ``audio_format``, ``audio_sample_rate``, and ``audio_encoding``
+    to send real audio through the STT pipeline.
+
+    At least one of ``text``, ``mock_transcript``, or ``audio_base64`` is required.
     """
     session_id: str | None = Field(
         None,
@@ -128,9 +141,55 @@ class VoiceTurnRequest(BaseModel):
         None,
         description="Mock transcript to simulate STT output. Equivalent to text.",
     )
+    # ── Audio payload metadata (Phase 5.2) ─────────────────────
+    audio_base64: str | None = Field(
+        None,
+        description="Base64-encoded audio bytes for real STT processing.",
+    )
+    audio_format: str | None = Field(
+        None,
+        description="Audio format: wav, mp3, ogg, pcm.",
+    )
+    audio_sample_rate: int | None = Field(
+        None,
+        description="Audio sample rate in Hz (e.g. 16000, 44100).",
+    )
+    audio_encoding: str | None = Field(
+        None,
+        description="Audio encoding: linear16, mulaw, alaw, opus, mp3, ogg_vorbis.",
+    )
+    audio_content_type: str | None = Field(
+        None,
+        description="MIME content type (e.g. audio/wav, audio/mpeg). Informational.",
+    )
+    # ── End audio payload metadata ──────────────────────────────
     client_name: str | None = Field(None, max_length=120)
     client_phone: str | None = Field(None, max_length=30)
     channel: str = Field("phone", description="Originating channel: phone, web, test")
+
+    @model_validator(mode="after")
+    def _validate_audio_metadata(self) -> "VoiceTurnRequest":
+        """Validate audio metadata fields when audio_base64 is provided."""
+        if self.audio_base64 is not None:
+            # Validate format
+            if self.audio_format and self.audio_format not in _VALID_AUDIO_FORMATS:
+                raise ValueError(
+                    f"audio_format must be one of {sorted(_VALID_AUDIO_FORMATS)}, "
+                    f"got '{self.audio_format}'"
+                )
+            # Validate sample rate
+            if self.audio_sample_rate and self.audio_sample_rate not in _VALID_SAMPLE_RATES:
+                raise ValueError(
+                    f"audio_sample_rate must be one of {sorted(_VALID_SAMPLE_RATES)}, "
+                    f"got {self.audio_sample_rate}"
+                )
+            # Validate encoding
+            if self.audio_encoding and self.audio_encoding not in _VALID_ENCODINGS:
+                raise ValueError(
+                    f"audio_encoding must be one of {sorted(_VALID_ENCODINGS)}, "
+                    f"got '{self.audio_encoding}'"
+                )
+        return self
 
 
 class VoiceTurnResponse(BaseModel):
@@ -159,6 +218,11 @@ class VoiceTurnResponse(BaseModel):
     )
     tts_meta: AudioMeta | None = Field(
         None, description="TTS output audio metadata"
+    )
+    tts_audio_url: str | None = Field(
+        None,
+        description="URL/path to the persisted TTS audio artifact (Phase 5.2). "
+        "None when TTS persistence is disabled or mock provider is used.",
     )
     provider_errors: list[dict] | None = Field(
         None,

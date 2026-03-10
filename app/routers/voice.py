@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth import require_api_key
+from app.circuit_breaker import stt_circuit_breaker, tts_circuit_breaker
 from app.config import settings
 from app.conversation import ConversationState, conversation_manager
 from app.database import get_db
@@ -51,6 +52,7 @@ from app.providers import (
     safe_transcribe,
 )
 from app.rate_limit import rate_limit_dependency
+from app.tts_artifact_store import tts_artifact_store
 from app.session_store import (
     append_transcript_event,
     create_session as db_create_session,
@@ -156,11 +158,40 @@ _stt_fallback: STTProvider = MockSTTProvider()
 _tts_fallback: TTSProvider = MockTTSProvider()
 
 
+def _get_circuit_breaker(role: str):
+    """Return the circuit breaker for the given role."""
+    if role == "stt":
+        return stt_circuit_breaker
+    return tts_circuit_breaker
+
+
+def _persist_tts_artifact(
+    session_id: str, response_text: str, tts_result: object,
+) -> str | None:
+    """Store TTS audio artifact locally if real audio bytes are available.
+
+    Returns the artifact URL/path or None if nothing was persisted (e.g. mock
+    provider that produces no actual audio).
+    """
+    # Real providers could attach audio bytes to TTS result in future.
+    # For now, only persist when audio_url is set (not None) or we synthesised
+    # real bytes.  The mock provider returns audio_url=None — skip silently.
+    if tts_result.audio_url is not None:
+        # Already has a URL (e.g. from a cloud provider) — return as-is.
+        return tts_result.audio_url
+    # Placeholder: when real TTS providers return raw bytes (future),
+    # we can persist them via tts_artifact_store.store_and_get_url().
+    return None
+
+
 def _record_provider_outcome(
     role: str, outcome: ProviderOutcome, rid: str, session_id: str,
 ) -> None:
-    """Emit structured log + metrics for a provider call outcome."""
+    """Emit structured log + metrics for a provider call outcome, update circuit breaker."""
+    cb = _get_circuit_breaker(role)
+
     if outcome.fallback_used:
+        cb.record_failure()
         metrics.inc(f"provider_{role}_fallback")
         _slog.warning(
             f"provider_{role}_fallback",
@@ -168,8 +199,10 @@ def _record_provider_outcome(
             session_id=session_id,
             error_kind=outcome.error_kind.value if outcome.error_kind else None,
             error_detail=outcome.error_detail,
+            cb_state=cb.state.value,
         )
     elif outcome.error_kind and not outcome.success:
+        cb.record_failure()
         metrics.inc(f"provider_{role}_error")
         metrics.inc(f"provider_{role}_{outcome.error_kind.value}")
         _slog.error(
@@ -178,7 +211,10 @@ def _record_provider_outcome(
             session_id=session_id,
             error_kind=outcome.error_kind.value,
             error_detail=outcome.error_detail,
+            cb_state=cb.state.value,
         )
+    else:
+        cb.record_success()
 
 
 def _collect_provider_errors(
@@ -429,28 +465,80 @@ async def voice_turn(
             auto_create=True,
         )
 
-    # 2. Resolve input text (text > mock_transcript)
+    # 2. Resolve input text — three modes:
+    #    a) text or mock_transcript provided → skip STT (text-only / test mode)
+    #    b) audio_base64 provided → decode and send through real STT pipeline
+    #    c) none of the above → 422
+    import base64 as _b64
+
     user_text = payload.text or payload.mock_transcript
-    if not user_text:
+    audio_bytes: bytes | None = None
+    audio_fmt_str = payload.audio_format or "wav"
+
+    # Only decode audio_base64 when no text input is provided (text takes priority).
+    if not user_text and payload.audio_base64 is not None:
+        # Decode base64 audio payload
+        try:
+            audio_bytes = _b64.b64decode(payload.audio_base64, validate=True)
+        except Exception:
+            raise HTTPException(
+                status_code=422,
+                detail="audio_base64 is not valid base64.",
+            )
+        if len(audio_bytes) == 0:
+            raise HTTPException(
+                status_code=422,
+                detail="audio_base64 decoded to empty bytes.",
+            )
+
+    if not user_text and audio_bytes is None:
         raise HTTPException(
             status_code=422,
-            detail="Provide either 'text' or 'mock_transcript'.",
+            detail="Provide 'text', 'mock_transcript', or 'audio_base64'.",
         )
 
-    # 3. STT step (with error classification + auto-fallback)
-    stt_result, stt_outcome = await safe_transcribe(
-        _stt_provider,
-        audio_bytes=user_text.encode("utf-8"),
-        language="fr",
-        fallback=_stt_fallback,
-    )
+    # 3. STT step (with circuit-breaker + error classification + auto-fallback)
+    #    When audio_bytes are present, route through the real STT provider.
+    #    When only text is provided, pass encoded text (mock-friendly path).
+    from app.providers import AudioFormat as _AF
+
+    stt_input_bytes = audio_bytes if audio_bytes is not None else user_text.encode("utf-8")
+    stt_audio_format = _AF(audio_fmt_str) if audio_fmt_str in _AF.__members__ else _AF.wav
+    stt_sample_rate = payload.audio_sample_rate or 16000
+
+    stt_cb = _get_circuit_breaker("stt")
+    if stt_cb.should_allow_request():
+        stt_result, stt_outcome = await safe_transcribe(
+            _stt_provider,
+            audio_bytes=stt_input_bytes,
+            audio_format=stt_audio_format,
+            language="fr",
+            fallback=_stt_fallback,
+        )
+    else:
+        # Circuit breaker is open → skip real provider, go straight to fallback
+        stt_result = await _stt_fallback.transcribe(
+            stt_input_bytes, audio_format=stt_audio_format, language="fr",
+        )
+        stt_outcome = ProviderOutcome(
+            success=True,
+            error_kind=ProviderErrorKind.fallback_used,
+            error_detail=f"circuit_breaker_open (cooldown {stt_cb.snapshot()['current_cooldown_s']}s)",
+            fallback_used=True,
+        )
+        metrics.inc("cb_stt_short_circuit")
     _record_provider_outcome("stt", stt_outcome, rid, state.session_id)
     stt_meta = AudioMeta(
-        format="wav",
+        format=audio_fmt_str,
         duration_ms=stt_result.duration_ms,
-        sample_rate=16000,
+        sample_rate=stt_sample_rate,
         provider=stt_result.provider,
     )
+
+    # When audio_base64 was provided, the STT transcript is the resolved text.
+    # Override user_text with STT result if we came through the audio path.
+    if audio_bytes is not None:
+        user_text = stt_result.transcript
 
     # 4. Intent extraction
     state.increment_turn()
@@ -478,10 +566,21 @@ async def voice_turn(
             response_text = _FALLBACK_RESPONSES[idx]
             action_taken = "fallback"
 
-        # Generate TTS for fallback (with error classification)
-        tts_result, tts_outcome = await safe_synthesize(
-            _tts_provider, response_text, language="fr", fallback=_tts_fallback,
-        )
+        # Generate TTS for fallback (with circuit-breaker + error classification)
+        tts_cb = _get_circuit_breaker("tts")
+        if tts_cb.should_allow_request():
+            tts_result, tts_outcome = await safe_synthesize(
+                _tts_provider, response_text, language="fr", fallback=_tts_fallback,
+            )
+        else:
+            tts_result = await _tts_fallback.synthesize(response_text, language="fr")
+            tts_outcome = ProviderOutcome(
+                success=True,
+                error_kind=ProviderErrorKind.fallback_used,
+                error_detail=f"circuit_breaker_open (cooldown {tts_cb.snapshot()['current_cooldown_s']}s)",
+                fallback_used=True,
+            )
+            metrics.inc("cb_tts_short_circuit")
         _record_provider_outcome("tts", tts_outcome, rid, state.session_id)
         tts_meta = AudioMeta(
             format=tts_result.audio_format.value,
@@ -519,6 +618,8 @@ async def voice_turn(
             consecutive_fallbacks=consecutive,
         )
 
+        tts_audio_url = _persist_tts_artifact(state.session_id, response_text, tts_result)
+
         return VoiceTurnResponse(
             session_id=state.session_id,
             turn_number=state.turns,
@@ -531,6 +632,7 @@ async def voice_turn(
             data=None,
             stt_meta=stt_meta,
             tts_meta=tts_meta,
+            tts_audio_url=tts_audio_url,
             provider_errors=_collect_provider_errors(
                 ("stt", stt_outcome), ("tts", tts_outcome),
             ),
@@ -550,10 +652,21 @@ async def voice_turn(
     handler = _INTENT_HANDLERS.get(state.current_intent or VoiceIntent.unknown, _handle_unknown)
     response_text, action_taken, data = await handler(state, entities, db)
 
-    # 9. TTS synthesis (with error classification + auto-fallback)
-    tts_result, tts_outcome = await safe_synthesize(
-        _tts_provider, response_text, language="fr", fallback=_tts_fallback,
-    )
+    # 9. TTS synthesis (with circuit-breaker + error classification + auto-fallback)
+    tts_cb = _get_circuit_breaker("tts")
+    if tts_cb.should_allow_request():
+        tts_result, tts_outcome = await safe_synthesize(
+            _tts_provider, response_text, language="fr", fallback=_tts_fallback,
+        )
+    else:
+        tts_result = await _tts_fallback.synthesize(response_text, language="fr")
+        tts_outcome = ProviderOutcome(
+            success=True,
+            error_kind=ProviderErrorKind.fallback_used,
+            error_detail=f"circuit_breaker_open (cooldown {tts_cb.snapshot()['current_cooldown_s']}s)",
+            fallback_used=True,
+        )
+        metrics.inc("cb_tts_short_circuit")
     _record_provider_outcome("tts", tts_outcome, rid, state.session_id)
     tts_meta = AudioMeta(
         format=tts_result.audio_format.value,
@@ -592,6 +705,8 @@ async def voice_turn(
         latency_ms=latency_ms,
     )
 
+    tts_audio_url = _persist_tts_artifact(state.session_id, response_text, tts_result)
+
     return VoiceTurnResponse(
         session_id=state.session_id,
         turn_number=state.turns,
@@ -604,6 +719,7 @@ async def voice_turn(
         data=data,
         stt_meta=stt_meta,
         tts_meta=tts_meta,
+        tts_audio_url=tts_audio_url,
         provider_errors=_collect_provider_errors(
             ("stt", stt_outcome), ("tts", tts_outcome),
         ),
