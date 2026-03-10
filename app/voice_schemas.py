@@ -97,3 +97,66 @@ class SessionEndResponse(BaseModel):
     message: str
     turns: int = Field(..., description="Number of user messages processed")
     duration_seconds: float | None = None
+
+
+# ── Voice Turn (Phase 3 – orchestration endpoint) ──────────
+
+class AudioMeta(BaseModel):
+    """Metadata about an audio segment (mock or real)."""
+    format: str = Field("wav", description="Audio format: wav, mp3, ogg, pcm")
+    duration_ms: int = Field(0, description="Audio duration in milliseconds")
+    sample_rate: int = Field(22050, description="Audio sample rate in Hz")
+    provider: str = Field("mock", description="STT/TTS provider used")
+
+
+class VoiceTurnRequest(BaseModel):
+    """
+    Unified voice turn request — accepts text OR mock transcript payload.
+
+    For real pipelines: audio_bytes would be transcribed via STT.
+    For testing/dev: pass text directly and skip STT.
+    """
+    session_id: str | None = Field(
+        None,
+        description="Existing session ID. If None, a new session is created automatically.",
+    )
+    text: str | None = Field(
+        None,
+        description="Pre-transcribed text (skips STT). Use for testing or text-only mode.",
+    )
+    mock_transcript: str | None = Field(
+        None,
+        description="Mock transcript to simulate STT output. Equivalent to text.",
+    )
+    client_name: str | None = Field(None, max_length=120)
+    client_phone: str | None = Field(None, max_length=30)
+    channel: str = Field("phone", description="Originating channel: phone, web, test")
+
+
+class VoiceTurnResponse(BaseModel):
+    """
+    Response from a single voice turn through the full loop.
+
+    Contains the assistant's reply text, intent metadata, and optional
+    audio metadata for the TTS output.
+    """
+    session_id: str
+    turn_number: int
+    intent: VoiceIntent
+    confidence: float = Field(
+        ..., ge=0.0, le=1.0, description="Intent detection confidence"
+    )
+    response_text: str = Field(..., description="Assistant reply text (sent to TTS)")
+    is_fallback: bool = Field(
+        False,
+        description="True if the response used the low-confidence fallback strategy",
+    )
+    booking_draft: BookingDraft | None = None
+    action_taken: str | None = None
+    data: dict | None = None
+    stt_meta: AudioMeta | None = Field(
+        None, description="STT input audio metadata (when audio was processed)"
+    )
+    tts_meta: AudioMeta | None = Field(
+        None, description="TTS output audio metadata"
+    )
