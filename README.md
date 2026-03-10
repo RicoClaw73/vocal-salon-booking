@@ -42,8 +42,20 @@ projects/vocal-salon-portfolio/
 │       ├── durations-matrix.json          ← Durées par service × longueur
 │       ├── employees.json                 ← 5 profils, compétences, horaires
 │       └── scheduling-rules.json          ← Règles d'affectation et conflits
-├── src/                                   ← (Phase 1 — à implémenter)
-└── tests/                                 ← (Phase 1 — à implémenter)
+├── app/
+│   ├── config.py                          ← Settings (pydantic-settings)
+│   ├── database.py                        ← Async SQLAlchemy engine & session
+│   ├── models.py                          ← ORM models (Service, Employee, Booking)
+│   ├── schemas.py                         ← Pydantic v2 request/response
+│   ├── slot_engine.py                     ← Availability & conflict logic
+│   ├── seed.py                            ← DB seeder from JSON data
+│   ├── main.py                            ← FastAPI app entrypoint
+│   └── routers/
+│       ├── services.py                    ← GET /services
+│       ├── employees.py                   ← GET /employees
+│       ├── availability.py                ← GET /availability/search
+│       └── bookings.py                    ← POST/GET/PATCH/DELETE /bookings
+└── tests/                                 ← pytest async test suite (26 tests)
 ```
 
 ## Stack technique prévue
@@ -73,7 +85,6 @@ Le catalogue est construit à partir de **12 sources web** couvrant 7 salons par
 
 ## Limites actuelles
 
-- **Pas de code fonctionnel** : Phase 0 (données + architecture) uniquement
 - **Durées estimées** : Quand non publiées par les salons, les durées sont des hypothèses métier documentées
 - **Pas de validation terrain** : Les données sont issues du web, pas d'entretien avec un gérant de salon
 - **Modèle économique théorique** : Les projections de ROI sont à valider avec des pilotes réels
@@ -84,21 +95,51 @@ Le catalogue est construit à partir de **12 sources web** couvrant 7 salons par
 | Phase | Description | Statut |
 |---|---|---|
 | **Phase 0** | Fondations, benchmark, architecture | ✅ Fait |
-| **Phase 1** | API de réservation (FastAPI + PostgreSQL) | 🔜 |
+| **Phase 1** | API de réservation (FastAPI + SQLite/PostgreSQL) | ✅ MVP |
 | **Phase 2** | Pipeline vocal (STT + LLM + TTS) | 🔜 |
 | **Phase 3** | Intégration et tests end-to-end | 🔜 |
 | **Phase 4** | Polish, vidéo démo, landing page | 🔜 |
 
 Voir [`docs/PLAN_DE_BATAILLE.md`](docs/PLAN_DE_BATAILLE.md) pour le détail.
 
-## Lancer le projet (futur)
+## Quickstart
 
 ```bash
-# Phase 1+ : quand le backend sera implémenté
-docker compose up -d
-# L'API sera disponible sur http://localhost:8000
-# La doc OpenAPI sur http://localhost:8000/docs
+# 1. Create virtual environment & install
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+
+# 2. Run the API (auto-creates SQLite DB + seeds data on first start)
+uvicorn app.main:app --reload
+# → http://localhost:8000/docs   (Swagger UI)
+# → http://localhost:8000/health (health check)
+
+# 3. Run the test suite
+pytest tests/ -v
 ```
+
+### API Endpoints (all under `/api/v1`)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness check |
+| `GET` | `/api/v1/services` | List services (filter: `category`, `genre`) |
+| `GET` | `/api/v1/services/{id}` | Service detail |
+| `GET` | `/api/v1/employees` | List employees |
+| `GET` | `/api/v1/employees/{id}` | Employee detail |
+| `GET` | `/api/v1/availability/search` | Find available slots (`service_id`, `date`, `employee_id`) |
+| `POST` | `/api/v1/bookings` | Create booking |
+| `GET` | `/api/v1/bookings/{id}` | Get booking |
+| `PATCH` | `/api/v1/bookings/{id}` | Reschedule booking |
+| `DELETE` | `/api/v1/bookings/{id}` | Cancel booking |
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `DATABASE_URL` | `sqlite+aiosqlite:///salon.db` | Async DB URL (SQLite or PostgreSQL) |
+| `DEBUG` | `true` | Enable SQL echo logging |
 
 ## Outils n8n intégrés pour agents de code
 
