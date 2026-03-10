@@ -6,14 +6,23 @@ POST /voice/sessions/message  – process a transcribed user utterance
 POST /voice/sessions/end      – close a voice session
 POST /voice/turn              – Phase 3: unified voice turn orchestration
                                 (STT → intent → conversation → TTS)
-GET  /voice/sessions/{id}/transcript – Phase 4.2: fetch session state for review
+GET  /voice/sessions/{id}/transcript – Phase 4.2→4.3: fetch session state + transcript
 
 These endpoints form the integration layer between a local STT/TTS pipeline
 and the existing salon booking API.  No external services required.
+
+Phase 4.3 changes:
+  - Session state is persisted to the database (voice_sessions table).
+  - Transcript events are persisted (transcript_events table) so transcripts
+    survive process restarts.
+  - The in-memory ConversationManager is kept as a hot-cache / fallback for
+    backward compatibility.  DB is the source of truth.
+  - API key auth (optional) and rate limiting (scaffold) added as deps.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date, datetime
 
@@ -22,12 +31,21 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.auth import require_api_key
 from app.config import settings
 from app.conversation import ConversationState, conversation_manager
 from app.database import get_db
 from app.intent import extract_intent
 from app.models import Booking, BookingStatus, Service
 from app.providers import STTProvider, TTSProvider, get_stt_provider, get_tts_provider
+from app.rate_limit import rate_limit_dependency
+from app.session_store import (
+    append_transcript_event,
+    create_session as db_create_session,
+    get_transcript_events,
+    load_session as db_load_session,
+    save_session as db_save_session,
+)
 from app.slot_engine import find_available_slots, validate_booking_request
 from app.voice_schemas import (
     AudioMeta,
@@ -46,7 +64,11 @@ from app.voice_schemas import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/voice", tags=["voice"])
+router = APIRouter(
+    prefix="/voice",
+    tags=["voice"],
+    dependencies=[Depends(require_api_key), Depends(rate_limit_dependency)],
+)
 
 # ── Greeting templates ───────────────────────────────────────
 
@@ -118,16 +140,75 @@ _stt_provider: STTProvider = _init_stt_provider()
 _tts_provider: TTSProvider = _init_tts_provider()
 
 
+# ── Session helpers (DB-backed + in-memory cache) ────────────
+
+async def _resolve_session(
+    db: AsyncSession,
+    session_id: str | None,
+    client_name: str | None = None,
+    client_phone: str | None = None,
+    channel: str = "phone",
+    *,
+    auto_create: bool = False,
+) -> ConversationState:
+    """
+    Load a session from DB (source of truth), falling back to the in-memory
+    cache for backward compat.  Optionally auto-create if session_id is None.
+    """
+    if session_id:
+        # Try DB first
+        state = await db_load_session(db, session_id)
+        if state is not None:
+            # Carry over volatile in-memory attributes (e.g. fallback counter)
+            old = conversation_manager._sessions.get(session_id)
+            if old is not None:
+                state._consecutive_fallbacks = getattr(  # type: ignore[attr-defined]
+                    old, "_consecutive_fallbacks", 0
+                )
+            # Sync into in-memory cache
+            conversation_manager._sessions[session_id] = state
+            return state
+        # Fallback: maybe it only exists in memory (legacy)
+        state = conversation_manager.get_session(session_id)
+        if state is not None:
+            return state
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session '{session_id}' introuvable.",
+        )
+
+    if not auto_create:
+        raise HTTPException(status_code=422, detail="session_id is required.")
+
+    # Create in DB and mirror to in-memory cache
+    state = await db_create_session(db, client_name, client_phone, channel)
+    conversation_manager._sessions[state.session_id] = state
+    return state
+
+
+async def _persist_state(db: AsyncSession, state: ConversationState) -> None:
+    """Save session state to DB and keep in-memory cache in sync."""
+    conversation_manager._sessions[state.session_id] = state
+    await db_save_session(db, state)
+
+
 # ── Endpoints ────────────────────────────────────────────────
 
 @router.post("/sessions/start", response_model=SessionStartResponse, status_code=201)
-async def start_session(payload: SessionStartRequest) -> SessionStartResponse:
+async def start_session(
+    payload: SessionStartRequest,
+    db: AsyncSession = Depends(get_db),
+) -> SessionStartResponse:
     """Open a new voice conversation session."""
-    state = conversation_manager.create_session(
+    state = await _resolve_session(
+        db,
+        session_id=None,
         client_name=payload.client_name,
         client_phone=payload.client_phone,
         channel=payload.channel,
+        auto_create=True,
     )
+    await db.commit()
     return SessionStartResponse(
         session_id=state.session_id,
         status=state.status,
@@ -142,9 +223,7 @@ async def process_message(
     db: AsyncSession = Depends(get_db),
 ) -> UserMessageResponse:
     """Process a transcribed user utterance through intent detection and fulfillment."""
-    state = conversation_manager.get_session(payload.session_id)
-    if not state:
-        raise HTTPException(status_code=404, detail=f"Session '{payload.session_id}' introuvable.")
+    state = await _resolve_session(db, payload.session_id)
     if state.status != SessionStatus.active:
         raise HTTPException(status_code=409, detail="Cette session est déjà terminée.")
 
@@ -166,6 +245,21 @@ async def process_message(
     handler = _INTENT_HANDLERS.get(state.current_intent or VoiceIntent.unknown, _handle_unknown)
     response_text, action_taken, data = await handler(state, entities, db)
 
+    # Persist state + transcript event
+    await _persist_state(db, state)
+    await append_transcript_event(
+        db,
+        session_id=state.session_id,
+        turn_number=state.turns,
+        user_text=payload.text,
+        intent=(state.current_intent or VoiceIntent.unknown).value,
+        confidence=result.confidence,
+        response_text=response_text,
+        action_taken=action_taken,
+        data=data,
+    )
+    await db.commit()
+
     return UserMessageResponse(
         session_id=state.session_id,
         intent=state.current_intent or VoiceIntent.unknown,
@@ -177,11 +271,20 @@ async def process_message(
 
 
 @router.post("/sessions/end", response_model=SessionEndResponse)
-async def end_session(payload: SessionEndRequest) -> SessionEndResponse:
+async def end_session(
+    payload: SessionEndRequest,
+    db: AsyncSession = Depends(get_db),
+) -> SessionEndResponse:
     """Close a voice conversation session."""
-    state = conversation_manager.end_session(payload.session_id)
-    if not state:
-        raise HTTPException(status_code=404, detail=f"Session '{payload.session_id}' introuvable.")
+    state = await _resolve_session(db, payload.session_id)
+
+    state.status = SessionStatus.completed
+    state.touch()
+
+    # Persist + sync
+    conversation_manager.end_session(payload.session_id)
+    await _persist_state(db, state)
+    await db.commit()
 
     return SessionEndResponse(
         session_id=state.session_id,
@@ -208,14 +311,9 @@ async def voice_turn(
     Returns assistant reply with intent metadata and TTS audio metadata.
     """
     # 1. Resolve or create session
-    state: ConversationState | None = None
+    state: ConversationState
     if payload.session_id:
-        state = conversation_manager.get_session(payload.session_id)
-        if not state:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Session '{payload.session_id}' introuvable.",
-            )
+        state = await _resolve_session(db, payload.session_id)
         if state.status != SessionStatus.active:
             raise HTTPException(
                 status_code=409,
@@ -223,10 +321,13 @@ async def voice_turn(
             )
     else:
         # Auto-create session for convenience
-        state = conversation_manager.create_session(
+        state = await _resolve_session(
+            db,
+            session_id=None,
             client_name=payload.client_name,
             client_phone=payload.client_phone,
             channel=payload.channel,
+            auto_create=True,
         )
 
     # 2. Resolve input text (text > mock_transcript)
@@ -257,14 +358,13 @@ async def voice_turn(
     entities = intent_result.entities
 
     # 5. Deterministic fallback strategy
-    #    Only trigger fallback if there is no active intent on the session.
-    #    If the user is mid-conversation (e.g. providing a date after starting
-    #    a booking), the unknown-intent utterance still carries useful entities.
-    has_active_intent = state.current_intent is not None and state.current_intent != VoiceIntent.unknown
+    has_active_intent = (
+        state.current_intent is not None and state.current_intent != VoiceIntent.unknown
+    )
     is_fallback = False
-    if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) and not has_active_intent:
+    if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) \
+            and not has_active_intent:
         is_fallback = True
-        # Track consecutive fallbacks on the session
         consecutive = getattr(state, "_consecutive_fallbacks", 0) + 1
         state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
 
@@ -272,7 +372,6 @@ async def voice_turn(
             response_text = _HUMAN_TRANSFER_MSG
             action_taken = "human_transfer_offered"
         else:
-            # Rotate through fallback messages
             idx = (consecutive - 1) % len(_FALLBACK_RESPONSES)
             response_text = _FALLBACK_RESPONSES[idx]
             action_taken = "fallback"
@@ -285,6 +384,21 @@ async def voice_turn(
             sample_rate=tts_result.sample_rate,
             provider=tts_result.provider,
         )
+
+        # Persist state + transcript event
+        await _persist_state(db, state)
+        await append_transcript_event(
+            db,
+            session_id=state.session_id,
+            turn_number=state.turns,
+            user_text=user_text,
+            intent=VoiceIntent.unknown.value,
+            confidence=confidence,
+            response_text=response_text,
+            action_taken=action_taken,
+            is_fallback=True,
+        )
+        await db.commit()
 
         return VoiceTurnResponse(
             session_id=state.session_id,
@@ -322,6 +436,22 @@ async def voice_turn(
         sample_rate=tts_result.sample_rate,
         provider=tts_result.provider,
     )
+
+    # 10. Persist state + transcript event
+    await _persist_state(db, state)
+    await append_transcript_event(
+        db,
+        session_id=state.session_id,
+        turn_number=state.turns,
+        user_text=user_text,
+        intent=(state.current_intent or VoiceIntent.unknown).value,
+        confidence=confidence,
+        response_text=response_text,
+        action_taken=action_taken,
+        is_fallback=False,
+        data=data,
+    )
+    await db.commit()
 
     return VoiceTurnResponse(
         session_id=state.session_id,
@@ -368,7 +498,11 @@ async def _handle_book(
     try:
         target_date = date.fromisoformat(draft.date)
     except (ValueError, TypeError):
-        return "Je n'ai pas compris la date. Pouvez-vous la répéter au format jour/mois/année ?", "date_invalid", None
+        return (
+            "Je n'ai pas compris la date. Pouvez-vous la répéter au format jour/mois/année ?",
+            "date_invalid",
+            None,
+        )
 
     avail = await find_available_slots(
         session=db,
@@ -400,9 +534,11 @@ async def _handle_book(
             break
 
     if not matched_slot:
-        # Offer first 3 available slots
         top_slots = avail["slots"][:3]
-        slots_text = ", ".join(s["start"].split("T")[1][:5] if "T" in s["start"] else s["start"] for s in top_slots)
+        slots_text = ", ".join(
+            s["start"].split("T")[1][:5] if "T" in s["start"] else s["start"]
+            for s in top_slots
+        )
         return (
             f"Le créneau de {requested_time} n'est pas disponible. "
             f"Créneaux disponibles : {slots_text}. Lequel préférez-vous ?",
@@ -492,9 +628,15 @@ async def _handle_reschedule(
     try:
         target_date = date.fromisoformat(new_date)
         h, m = new_time.split(":")
-        new_start = datetime.combine(target_date, datetime.min.time().replace(hour=int(h), minute=int(m)))
+        new_start = datetime.combine(
+            target_date, datetime.min.time().replace(hour=int(h), minute=int(m))
+        )
     except (ValueError, TypeError):
-        return "Je n'ai pas compris la date ou l'heure. Pouvez-vous répéter ?", "datetime_invalid", None
+        return (
+            "Je n'ai pas compris la date ou l'heure. Pouvez-vous répéter ?",
+            "datetime_invalid",
+            None,
+        )
 
     employee_id = booking.employee_id
     ok, message, end_time = await validate_booking_request(
@@ -571,7 +713,8 @@ async def _handle_check_availability(
     target_date_str = entities.get("date") or state.booking_draft.date
     if not target_date_str:
         return (
-            f"J'ai trouvé le service : {resolved.label} ({resolved.prix_eur}€, {resolved.duree_min} min). "
+            f"J'ai trouvé le service : {resolved.label} ({resolved.prix_eur}€, "
+            f"{resolved.duree_min} min). "
             "Pour quelle date souhaitez-vous vérifier les disponibilités ?",
             "need_date",
             {"service": {"id": resolved.id, "label": resolved.label}},
@@ -580,7 +723,11 @@ async def _handle_check_availability(
     try:
         target_date = date.fromisoformat(target_date_str)
     except (ValueError, TypeError):
-        return "Format de date non reconnu. Merci d'utiliser le format AAAA-MM-JJ.", "date_invalid", None
+        return (
+            "Format de date non reconnu. Merci d'utiliser le format AAAA-MM-JJ.",
+            "date_invalid",
+            None,
+        )
 
     avail = await find_available_slots(
         session=db,
@@ -606,10 +753,15 @@ async def _handle_check_availability(
         for s in top_slots
     )
     return (
-        f"{len(avail['slots'])} créneau(x) disponible(s) le {target_date_str} pour {resolved.label}. "
+        f"{len(avail['slots'])} créneau(x) disponible(s) le {target_date_str} "
+        f"pour {resolved.label}. "
         f"Premiers créneaux : {slots_text}. Souhaitez-vous réserver ?",
         "slots_found",
-        {"service_id": resolved.id, "slots_count": len(avail["slots"]), "top_slots": top_slots},
+        {
+            "service_id": resolved.id,
+            "slots_count": len(avail["slots"]),
+            "top_slots": top_slots,
+        },
     )
 
 
@@ -629,20 +781,30 @@ async def _handle_unknown(
     )
 
 
-# ── Phase 4.2: Session transcript / state review ─────────────
+# ── Phase 4.2→4.3: Session transcript / state review ─────────
 
 
 @router.get("/sessions/{session_id}/transcript")
-async def get_session_transcript(session_id: str) -> dict:
+async def get_session_transcript(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     """
     Fetch the current state of a voice session for demo review.
 
-    Returns session metadata, booking draft, and lifecycle info.
-    Useful for inspecting conversation state during or after a demo run.
+    Returns session metadata, booking draft, lifecycle info, and the full
+    transcript event log.  Since Phase 4.3 the transcript is persisted in
+    the database, so it survives process restarts.
     """
-    state = conversation_manager.get_session(session_id)
-    if not state:
+    # Try DB first, fall back to in-memory
+    state = await db_load_session(db, session_id)
+    if state is None:
+        state = conversation_manager.get_session(session_id)
+    if state is None:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' introuvable.")
+
+    # Load transcript events from DB
+    events = await get_transcript_events(db, session_id)
 
     return {
         "session_id": state.session_id,
@@ -656,6 +818,7 @@ async def get_session_transcript(session_id: str) -> dict:
         "created_at": state.created_at.isoformat(),
         "last_activity": state.last_activity.isoformat(),
         "duration_seconds": state.duration_seconds,
+        "transcript": events,
     }
 
 
