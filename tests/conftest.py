@@ -3,6 +3,9 @@ Shared test fixtures.
 
 Uses an in-memory SQLite database – no files, no external deps.
 Each test function gets a fresh database with seeded reference data.
+
+Phase 4.3: also resets rate-limiter buckets between tests so state
+doesn't leak across test boundaries.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.database import get_db
 from app.models import Base
+from app.rate_limit import _reset_buckets
 from app.seed import seed_all
 
 # ── In-memory test engine ───────────────────────────────────
@@ -38,7 +42,8 @@ def event_loop():
 
 @pytest.fixture(autouse=True)
 async def setup_db():
-    """Create all tables before each test, drop after."""
+    """Create all tables before each test, drop after.  Reset rate limiter."""
+    _reset_buckets()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with test_session_factory() as session:
@@ -46,6 +51,7 @@ async def setup_db():
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+    _reset_buckets()
 
 
 async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
