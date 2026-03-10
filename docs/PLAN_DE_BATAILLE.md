@@ -5,12 +5,39 @@
 | Phase | Nom | Durée estimée | Statut |
 |---|---|---|---|
 | 0 | Fondations & Data | 1 semaine | ✅ FAIT |
+| 0.5 | Reverse Engineering Vidéo | 1 jour | ✅ FAIT |
 | 1 | API Réservation | 2 semaines | 🔜 À faire |
 | 2 | Pipeline Vocal | 2 semaines | 🔜 À faire |
 | 3 | Intégration & Tests | 1 semaine | 🔜 À faire |
 | 4 | Polish & Démo | 1 semaine | 🔜 À faire |
 
-**Durée totale estimée** : 7 semaines
+**Durée totale estimée** : 7 semaines + 1 jour
+
+---
+
+## Phase 0.5 — Reverse Engineering Vidéo ✅
+
+> Ajouté le 2026-03-10 — Analyse de la vidéo "Créer Son Premier Agent IA Vocal en 48 minutes" (Yassine Sdiri, 2026-03-08)
+
+### Milestone 0.5.1 : Extraction données vidéo
+- [x] Extraction transcript auto-generated FR (1742 snippets, `youtube-transcript-api`)
+- [x] Extraction commentaires YouTube (22/22 via `yt-dlp --write-comments`)
+- [x] Extraction métadonnées (titre, durée, chapitres, stack)
+
+### Milestone 0.5.2 : Documents d'analyse
+- [x] `VIDEO_ANALYSIS.md` — Analyse complète : stack, architecture n8n, prompts, démos, forces/faiblesses
+- [x] `VIDEO_COMMENTS_INSIGHTS.md` — 22 commentaires classés, 5 insights actionnables
+- [x] `N8N_WORKFLOW_REDESIGN.md` — 7 tools, workflows détaillés, prompt système amélioré
+
+### Décisions clés issues du reverse engineering
+1. **ElevenLabs** confirmé comme front vocal (meilleure voix FR du marché)
+2. **n8n** confirmé comme orchestrateur (justifié par notre logique multi-employés)
+3. **Google Calendar remplacé** par notre API FastAPI+PostgreSQL (multi-employés, conflits, durées)
+4. **7 tools au lieu de 2** (ajout cancel, modify, list_services, get_booking, transfer_human)
+5. **Planity** identifié comme intégration prioritaire (signal commentaire @scrat57)
+6. **SMS confirmation** ajouté au scope (absent de la vidéo, demandé implicitement)
+
+**Critère d'acceptation** : Les 3 documents sont cohérents entre eux et alimentent les phases suivantes.
 
 ---
 
