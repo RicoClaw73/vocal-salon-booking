@@ -292,7 +292,7 @@ async def _handle_utterance(
     persistence logic from the voice module.  In dry-run mode, processes
     fully but marks the response as dry_run=True (no actual TTS delivery).
     """
-    from app.intent import extract_intent
+    from app.intent import extract_intent_async
     from app.routers.voice import (
         _FALLBACK_RESPONSES,
         _HUMAN_TRANSFER_MSG,
@@ -329,8 +329,8 @@ async def _handle_utterance(
 
     state.increment_turn()
 
-    # Intent extraction
-    intent_result = extract_intent(user_text)
+    # Intent extraction (LLM-first when configured, else rule-based)
+    intent_result = await extract_intent_async(user_text)
     intent = intent_result.intent
     confidence = intent_result.confidence
     entities = intent_result.entities

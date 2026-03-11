@@ -22,7 +22,6 @@ Phase 4.3 changes:
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import date, datetime
 
@@ -36,7 +35,7 @@ from app.circuit_breaker import stt_circuit_breaker, tts_circuit_breaker
 from app.config import settings
 from app.conversation import ConversationState, conversation_manager
 from app.database import get_db
-from app.intent import extract_intent
+from app.intent import extract_intent_async
 from app.models import Booking, BookingStatus, Service
 from app.observability import StructuredLogger, metrics, new_request_id
 from app.providers import (
@@ -52,7 +51,6 @@ from app.providers import (
     safe_transcribe,
 )
 from app.rate_limit import rate_limit_dependency
-from app.tts_artifact_store import tts_artifact_store
 from app.session_store import (
     append_transcript_event,
     create_session as db_create_session,
@@ -61,6 +59,7 @@ from app.session_store import (
     save_session as db_save_session,
 )
 from app.slot_engine import find_available_slots, validate_booking_request
+from app.tts_artifact_store import tts_artifact_store
 from app.voice_schemas import (
     AudioMeta,
     BookingDraft,
@@ -335,8 +334,8 @@ async def process_message(
 
     state.increment_turn()
 
-    # Extract intent and entities
-    result = extract_intent(payload.text)
+    # Extract intent and entities (LLM-first when configured, else rule-based)
+    result = await extract_intent_async(payload.text)
     intent = result.intent
     entities = result.entities
 
@@ -540,9 +539,9 @@ async def voice_turn(
     if audio_bytes is not None:
         user_text = stt_result.transcript
 
-    # 4. Intent extraction
+    # 4. Intent extraction (LLM-first when configured, else rule-based)
     state.increment_turn()
-    intent_result = extract_intent(user_text)
+    intent_result = await extract_intent_async(user_text)
     intent = intent_result.intent
     confidence = intent_result.confidence
     entities = intent_result.entities

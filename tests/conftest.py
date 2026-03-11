@@ -18,6 +18,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.circuit_breaker import stt_circuit_breaker, tts_circuit_breaker
+from app.config import settings
 from app.database import get_db
 from app.models import Base
 from app.observability import metrics
@@ -51,6 +52,11 @@ async def setup_db():
     stt_circuit_breaker.reset()
     tts_circuit_breaker.reset()
     idempotency_guard.reset()
+
+    # Disable LLM provider in tests to prevent real API calls.
+    # Tests that need LLM should mock classify_intent_llm explicitly.
+    _orig_llm_provider = settings.LLM_PROVIDER
+    settings.LLM_PROVIDER = "mock"
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with test_session_factory() as session:
@@ -59,6 +65,7 @@ async def setup_db():
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     _reset_buckets()
+    settings.LLM_PROVIDER = _orig_llm_provider
 
 
 async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:

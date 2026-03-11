@@ -1,19 +1,29 @@
 """
-Deterministic intent extraction for the voice pipeline MVP.
+Intent extraction for the voice pipeline.
 
-Uses keyword matching and simple regex patterns to classify user utterances
-into one of: book, reschedule, cancel, check_availability, unknown.
+Two engines are available:
 
-This is intentionally simple — designed to be replaced by an LLM classifier
-in later phases while keeping the same interface.
+1. **Rule-based** (deterministic) — keyword matching and regex patterns.
+   Always available, no external dependencies.  Used as fallback.
+
+2. **LLM-first** (Phase 6) — OpenAI GPT-4o structured classification.
+   Activated when ``LLM_PROVIDER=openai`` and ``OPENAI_API_KEY`` is set.
+   Falls back transparently to rule-based on any error/timeout.
+
+Public API:
+  - ``extract_intent(text)``       — synchronous, rule-based only (backward compat)
+  - ``extract_intent_async(text)``  — async, LLM-first with rule-based fallback
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 
 from app.voice_schemas import VoiceIntent
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -186,3 +196,63 @@ def _extract_entities(text: str) -> dict:
         entities["longueur"] = "long"
 
     return entities
+
+
+# ── Async LLM-first dispatcher ──────────────────────────────
+
+async def extract_intent_async(text: str) -> IntentResult:
+    """
+    Async intent extraction — LLM-first with rule-based fallback.
+
+    When LLM is configured (LLM_PROVIDER=openai + OPENAI_API_KEY set):
+      1. Call GPT-4o for structured intent classification.
+      2. If successful, merge LLM entities with rule-based entities
+         (rule-based entities fill gaps the LLM might miss, e.g. service_category).
+      3. On ANY failure (timeout, invalid response, network error),
+         fall back transparently to the deterministic engine.
+
+    When LLM is NOT configured:
+      Delegates directly to the synchronous rule-based ``extract_intent()``.
+    """
+    from app.llm_intent import LLMIntentError, classify_intent_llm, is_llm_available
+
+    # Fast path: LLM not configured → rule-based only
+    if not is_llm_available():
+        return extract_intent(text)
+
+    # LLM-first path
+    try:
+        llm_result = await classify_intent_llm(text)
+    except LLMIntentError as exc:
+        logger.warning("LLM intent fallback to rule-based: %s", exc)
+        return extract_intent(text)
+    except Exception as exc:
+        # Catch-all: never let an unexpected LLM error break the voice pipeline
+        logger.error("LLM intent unexpected error, falling back: %s", exc)
+        return extract_intent(text)
+
+    # Merge: start with rule-based entities (service_category, genre, longueur, etc.)
+    # then overlay LLM-extracted entities on top.
+    rule_entities = _extract_entities(text)
+
+    merged_entities = {**rule_entities}
+
+    # Map LLM entity names to our internal names
+    llm_ent = llm_result.entities
+    if "service" in llm_ent and llm_ent["service"]:
+        merged_entities.setdefault("service_keyword", llm_ent["service"])
+    if "date" in llm_ent and llm_ent["date"]:
+        merged_entities["date"] = llm_ent["date"]
+    if "time" in llm_ent and llm_ent["time"]:
+        merged_entities["time"] = llm_ent["time"]
+    if "booking_id" in llm_ent and llm_ent["booking_id"]:
+        try:
+            merged_entities["booking_id"] = int(llm_ent["booking_id"])
+        except (TypeError, ValueError):
+            pass  # Keep rule-based booking_id if LLM gave garbage
+
+    return IntentResult(
+        intent=llm_result.intent,
+        confidence=llm_result.confidence,
+        entities=merged_entities,
+    )
