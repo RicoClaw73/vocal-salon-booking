@@ -1,29 +1,33 @@
 """
 Tests for telephony adapter layer, router, idempotency, dry-run,
-payload guardrails, and backward compatibility (Phase 5.3).
+payload guardrails, shadow mode, Redis idempotency, Twilio real
+signature validation, and backward compatibility (Phase 5.3 + 5.4).
 """
 
 from __future__ import annotations
 
-import json
+import base64
+import hashlib
+import hmac
 import time
+from unittest.mock import MagicMock, patch
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
 from app.config import settings
 from app.telephony_adapter import (
     CallEventType,
     EventIdempotencyGuard,
-    InboundCallEvent,
     LocalAdapter,
     OutboundResponse,
+    RedisIdempotencyGuard,
     TwilioAdapter,
     VapiAdapter,
+    _verify_twilio_signature,
+    create_idempotency_guard,
     get_telephony_adapter,
-    idempotency_guard,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════
 # Unit tests: Adapter parsing
@@ -633,6 +637,265 @@ class TestTelephonyRouter:
             assert resp.status_code == 404
         finally:
             settings.TELEPHONY_ENABLED = original_enabled
+
+    async def test_status_reports_shadow_mode(self, client: AsyncClient):
+        """GET /telephony/status includes shadow_mode field."""
+        resp = await client.get("/api/v1/telephony/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "shadow_mode" in data
+        assert "idempotency_backend" in data
+        assert data["idempotency_backend"] in ("in_memory", "redis")
+
+    async def test_status_reports_shadow_suppressed_counter(self, client: AsyncClient):
+        """GET /telephony/status includes shadow_suppressed counter."""
+        resp = await client.get("/api/v1/telephony/status")
+        data = resp.json()
+        assert "shadow_suppressed" in data["counters"]
+
+    async def test_shadow_mode_tags_response(self, client: AsyncClient):
+        """In shadow mode, utterance responses include shadow_mode=True."""
+        original_enabled = settings.TELEPHONY_ENABLED
+        original_shadow = settings.TELEPHONY_SHADOW_MODE
+        settings.TELEPHONY_ENABLED = True
+        settings.TELEPHONY_SHADOW_MODE = True
+        try:
+            # Start call
+            start = await client.post("/api/v1/telephony/inbound", json={
+                "event_type": "call.started",
+                "event_id": "shadow-test-001",
+                "caller_name": "Shadow Test",
+            })
+            session_id = start.json()["session_id"]
+
+            # Send utterance
+            resp = await client.post("/api/v1/telephony/inbound", json={
+                "event_type": "utterance",
+                "event_id": "shadow-test-002",
+                "session_id": session_id,
+                "transcript": "Je voudrais réserver une coupe",
+            })
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["shadow_mode"] is True
+        finally:
+            settings.TELEPHONY_ENABLED = original_enabled
+            settings.TELEPHONY_SHADOW_MODE = original_shadow
+
+    async def test_shadow_mode_off_no_tag(self, client: AsyncClient):
+        """When shadow mode is off, response has no shadow_mode key."""
+        original_enabled = settings.TELEPHONY_ENABLED
+        original_shadow = settings.TELEPHONY_SHADOW_MODE
+        settings.TELEPHONY_ENABLED = True
+        settings.TELEPHONY_SHADOW_MODE = False
+        try:
+            start = await client.post("/api/v1/telephony/inbound", json={
+                "event_type": "call.started",
+                "event_id": "no-shadow-001",
+                "caller_name": "No Shadow",
+            })
+            session_id = start.json()["session_id"]
+
+            resp = await client.post("/api/v1/telephony/inbound", json={
+                "event_type": "utterance",
+                "event_id": "no-shadow-002",
+                "session_id": session_id,
+                "transcript": "Je voudrais réserver",
+            })
+            assert resp.status_code == 200
+            data = resp.json()
+            assert "shadow_mode" not in data
+        finally:
+            settings.TELEPHONY_ENABLED = original_enabled
+            settings.TELEPHONY_SHADOW_MODE = original_shadow
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 5.4: Twilio real signature validation
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestTwilioRealSignature:
+    """Tests for the real Twilio signature verification algorithm."""
+
+    def test_verify_twilio_signature_valid(self):
+        """Known-good Twilio signature passes."""
+        auth_token = "test-auth-token-12345"
+        url = "https://myapp.example.com/api/v1/telephony/inbound"
+        params = {"CallSid": "CA123", "CallStatus": "ringing", "From": "+33612345678"}
+
+        # Compute expected signature using the algorithm
+        data = url
+        for key in sorted(params.keys()):
+            data += key + params[key]
+        mac = hmac.new(auth_token.encode(), data.encode(), hashlib.sha1)
+        expected_sig = base64.b64encode(mac.digest()).decode()
+
+        assert _verify_twilio_signature(auth_token, url, params, expected_sig) is True
+
+    def test_verify_twilio_signature_invalid(self):
+        """Wrong signature fails."""
+        assert _verify_twilio_signature(
+            auth_token="secret",
+            url="https://example.com/webhook",
+            params={"CallSid": "CA123"},
+            signature="wrong-signature",
+        ) is False
+
+    def test_verify_twilio_signature_empty_params(self):
+        """Empty params dict works (e.g. GET requests)."""
+        auth_token = "secret"
+        url = "https://example.com/webhook"
+        params: dict[str, str] = {}
+
+        data = url
+        mac = hmac.new(auth_token.encode(), data.encode(), hashlib.sha1)
+        expected_sig = base64.b64encode(mac.digest()).decode()
+
+        assert _verify_twilio_signature(auth_token, url, params, expected_sig) is True
+
+    def test_twilio_adapter_uses_real_algorithm_with_url(self):
+        """TwilioAdapter uses real Twilio algorithm when webhook_url is set."""
+        auth_token = "my-twilio-token"
+        webhook_url = "https://salon.example.com/api/v1/telephony/inbound"
+        adapter = TwilioAdapter(webhook_secret=auth_token, webhook_url=webhook_url)
+
+        params = {"CallSid": "CA999", "From": "+33699999999"}
+        data = webhook_url
+        for key in sorted(params.keys()):
+            data += key + params[key]
+        mac = hmac.new(auth_token.encode(), data.encode(), hashlib.sha1)
+        valid_sig = base64.b64encode(mac.digest()).decode()
+
+        # Pass as keyword — real Twilio mode
+        assert adapter.validate_signature(b"", valid_sig, url=webhook_url, params=params) is True
+        assert adapter.validate_signature(b"", "bad-sig", url=webhook_url, params=params) is False
+
+    def test_twilio_adapter_falls_back_to_hmac_sha256(self):
+        """Without URL, TwilioAdapter falls back to HMAC-SHA256 of raw body."""
+        secret = "fallback-secret"
+        adapter = TwilioAdapter(webhook_secret=secret)  # no webhook_url
+
+        body = b'{"CallSid": "CA123"}'
+        sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+        assert adapter.validate_signature(body, sig) is True
+        assert adapter.validate_signature(body, "wrong") is False
+
+    def test_twilio_adapter_no_signature_when_secret_set(self):
+        """Missing signature is rejected when secret is configured."""
+        adapter = TwilioAdapter(webhook_secret="configured")
+        assert adapter.validate_signature(b"payload", "") is False
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 5.4: Redis idempotency guard
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestRedisIdempotencyGuard:
+    """Tests for RedisIdempotencyGuard (mocked Redis — no real server needed)."""
+
+    def _make_guard(self, mock_redis=None):
+        """Create a RedisIdempotencyGuard with a mocked Redis client."""
+        guard = RedisIdempotencyGuard(
+            redis_url="redis://fake:6379/0",
+            key_prefix="test:idem:",
+            ttl_seconds=3600,
+        )
+        if mock_redis is not None:
+            guard._redis = mock_redis
+            guard._available = True
+        return guard
+
+    def test_new_event_accepted(self):
+        mock_redis = MagicMock()
+        mock_redis.set.return_value = True  # SET NX succeeded
+        guard = self._make_guard(mock_redis)
+
+        assert guard.check_and_mark("evt-100") is True
+        mock_redis.set.assert_called_once_with("test:idem:evt-100", "1", nx=True, ex=3600)
+
+    def test_duplicate_event_rejected(self):
+        mock_redis = MagicMock()
+        mock_redis.set.return_value = None  # SET NX failed (key exists)
+        guard = self._make_guard(mock_redis)
+
+        assert guard.check_and_mark("evt-100") is False
+
+    def test_is_known_true(self):
+        mock_redis = MagicMock()
+        mock_redis.exists.return_value = 1
+        guard = self._make_guard(mock_redis)
+
+        assert guard.is_known("evt-100") is True
+
+    def test_is_known_false(self):
+        mock_redis = MagicMock()
+        mock_redis.exists.return_value = 0
+        guard = self._make_guard(mock_redis)
+
+        assert guard.is_known("evt-100") is False
+
+    def test_fail_open_on_redis_error(self):
+        """Redis failure → event is allowed through (fail-open)."""
+        mock_redis = MagicMock()
+        mock_redis.set.side_effect = Exception("Connection refused")
+        guard = self._make_guard(mock_redis)
+
+        assert guard.check_and_mark("evt-100") is True
+        assert guard._available is False
+
+    def test_fail_open_when_unavailable(self):
+        """When Redis was never reachable, events pass through."""
+        guard = RedisIdempotencyGuard(
+            redis_url="redis://fake:6379/0",
+            key_prefix="test:idem:",
+            ttl_seconds=3600,
+        )
+        guard._available = False
+        # _get_redis will try to connect and fail — should still return True
+        assert guard.check_and_mark("evt-100") is True
+
+    def test_size_with_redis(self):
+        mock_redis = MagicMock()
+        mock_redis.scan.return_value = (0, ["test:idem:a", "test:idem:b"])
+        guard = self._make_guard(mock_redis)
+
+        assert guard.size == 2
+
+    def test_reset_clears_keys(self):
+        mock_redis = MagicMock()
+        mock_redis.scan.return_value = (0, ["test:idem:a", "test:idem:b"])
+        guard = self._make_guard(mock_redis)
+
+        guard.reset()
+        mock_redis.delete.assert_called_once_with("test:idem:a", "test:idem:b")
+
+    def test_is_available_property(self):
+        guard = self._make_guard(MagicMock())
+        assert guard.is_available is True
+
+
+class TestIdempotencyGuardFactory:
+    """Tests for create_idempotency_guard factory."""
+
+    def test_no_redis_url_returns_in_memory(self):
+        guard = create_idempotency_guard(redis_url="")
+        assert isinstance(guard, EventIdempotencyGuard)
+
+    def test_redis_url_without_redis_package_falls_back(self):
+        """When redis package is not importable, factory falls back to in-memory."""
+        with patch.dict("sys.modules", {"redis": None}):
+            guard = create_idempotency_guard(redis_url="redis://localhost:6379/0")
+            assert isinstance(guard, EventIdempotencyGuard)
+
+    def test_redis_url_with_redis_package_returns_redis_guard(self):
+        """When redis package is available, factory returns RedisIdempotencyGuard."""
+        mock_redis_mod = MagicMock()
+        with patch.dict("sys.modules", {"redis": mock_redis_mod}):
+            guard = create_idempotency_guard(redis_url="redis://localhost:6379/0")
+            assert isinstance(guard, RedisIdempotencyGuard)
 
 
 # ═══════════════════════════════════════════════════════════════════

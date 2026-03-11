@@ -18,6 +18,7 @@ Provider selection (Phase 4):
 from __future__ import annotations
 
 from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -90,6 +91,32 @@ class Settings(BaseSettings):
 
     # Event retention: max age (hours) before processed-event IDs are pruned.
     TELEPHONY_EVENT_TTL_HOURS: int = 24
+
+    # ── Telephony – Phase 5.4: Pilot real-call flow ───────────
+    # Twilio webhook URL for signature verification (must match the URL
+    # configured in the Twilio console).  Only used when TELEPHONY_PROVIDER=twilio
+    # and TELEPHONY_WEBHOOK_SECRET is non-empty.  Example:
+    #   https://yourdomain.com/api/v1/telephony/inbound
+    TWILIO_WEBHOOK_URL: str = ""
+
+    # Shadow mode: when True, inbound events are fully processed but NO
+    # booking-mutating side effects (booking creation, modification, cancel)
+    # are committed.  Decision traces are persisted for operator review.
+    # This is stricter than TELEPHONY_DRY_RUN which only suppresses TTS
+    # delivery; shadow mode also prevents DB writes that change business state.
+    TELEPHONY_SHADOW_MODE: bool = True
+
+    # ── Redis (optional, Phase 5.4) ─────────────────────────────
+    # When set, the idempotency guard uses Redis instead of in-memory dict.
+    # Format: redis://[:password@]host:port/db  or  rediss://... for TLS.
+    # Empty string (default) = use in-memory guard (no Redis dependency).
+    REDIS_URL: str = ""
+
+    # Prefix for Redis keys used by the telephony idempotency guard.
+    REDIS_KEY_PREFIX: str = "salon:idem:"
+
+    # TTL for Redis idempotency keys (seconds).  Default: matches event TTL.
+    REDIS_IDEMPOTENCY_TTL_SECONDS: int = 86400  # 24h
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

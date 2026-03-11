@@ -1,5 +1,5 @@
 """
-Telephony integration endpoints (Phase 5.3).
+Telephony integration endpoints (Phase 5.3 + 5.4).
 
 Provides a provider-agnostic webhook ingestion layer for inbound telephony
 call events.  Events are normalised through the adapter layer, de-duplicated
@@ -8,6 +8,9 @@ via the idempotency guard, and routed through the existing voice pipeline.
 Pilot controls:
   - TELEPHONY_ENABLED: gate all ingestion (returns 503 when off)
   - TELEPHONY_DRY_RUN: process events but suppress outbound side-effects
+  - TELEPHONY_SHADOW_MODE: process events fully but suppress booking-mutating
+    DB writes (creation, modification, cancellation).  Decision traces are
+    logged for operator review.  Stricter than DRY_RUN.
   - Payload size guardrails (TELEPHONY_MAX_PAYLOAD_BYTES)
   - Per-event observability logging and metrics
 
@@ -19,7 +22,6 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,8 +34,14 @@ from app.observability import StructuredLogger, metrics, new_request_id
 from app.rate_limit import rate_limit_dependency
 from app.session_store import (
     append_transcript_event,
+)
+from app.session_store import (
     create_session as db_create_session,
+)
+from app.session_store import (
     load_session as db_load_session,
+)
+from app.session_store import (
     save_session as db_save_session,
 )
 from app.telephony_adapter import (
@@ -72,7 +80,13 @@ def _get_adapter() -> TelephonyAdapter:
     return get_telephony_adapter(
         provider=settings.TELEPHONY_PROVIDER,
         webhook_secret=settings.TELEPHONY_WEBHOOK_SECRET,
+        webhook_url=settings.TWILIO_WEBHOOK_URL,
     )
+
+
+def _is_shadow_mode() -> bool:
+    """Check if shadow mode is active (suppress booking-mutating writes)."""
+    return settings.TELEPHONY_SHADOW_MODE
 
 
 # ── Pilot gate middleware ────────────────────────────────────────
@@ -125,7 +139,10 @@ async def telephony_inbound(
         )
         raise HTTPException(
             status_code=413,
-            detail=f"Payload too large: {len(body)} bytes (limit: {settings.TELEPHONY_MAX_PAYLOAD_BYTES}).",
+            detail=(
+                f"Payload too large: {len(body)} bytes "
+                f"(limit: {settings.TELEPHONY_MAX_PAYLOAD_BYTES})."
+            ),
         )
 
     # 3. Parse raw payload
@@ -177,6 +194,7 @@ async def telephony_inbound(
         provider=event.provider,
         session_id=event.session_id,
         dry_run=settings.TELEPHONY_DRY_RUN,
+        shadow_mode=_is_shadow_mode(),
     )
 
     result = await _handle_event(event, adapter, db, rid)
@@ -276,12 +294,12 @@ async def _handle_utterance(
     """
     from app.intent import extract_intent
     from app.routers.voice import (
-        _INTENT_HANDLERS,
-        _merge_entities_to_draft,
-        FALLBACK_CONFIDENCE_THRESHOLD,
         _FALLBACK_RESPONSES,
-        MAX_CONSECUTIVE_FALLBACKS,
         _HUMAN_TRANSFER_MSG,
+        _INTENT_HANDLERS,
+        FALLBACK_CONFIDENCE_THRESHOLD,
+        MAX_CONSECUTIVE_FALLBACKS,
+        _merge_entities_to_draft,
     )
 
     # Resolve session
@@ -353,7 +371,27 @@ async def _handle_utterance(
             handler = _handle_unknown
         response_text, action_taken, data = await handler(state, entities, db)
 
-    # Persist state + transcript
+    # Shadow mode: suppress booking-mutating actions but keep decision traces
+    resolved_intent = (state.current_intent or VoiceIntent.unknown).value
+    shadow = _is_shadow_mode()
+    mutating_actions = {"booking_created", "booking_confirmed", "booking_modified",
+                        "booking_cancelled", "booking_canceled"}
+    shadow_suppressed = False
+
+    if shadow and action_taken in mutating_actions:
+        shadow_suppressed = True
+        metrics.inc("telephony_shadow_suppressed")
+        _slog.info(
+            "telephony_shadow_suppressed",
+            session_id=state.session_id,
+            original_action=action_taken,
+            intent=resolved_intent if not is_fallback else "fallback",
+            booking_draft=getattr(state, "booking_draft", None),
+        )
+        action_taken = f"shadow:{action_taken}"
+
+    # Persist state + transcript (always — shadow only blocks booking mutations,
+    # not session/transcript persistence which is needed for operator review)
     conversation_manager._sessions[state.session_id] = state
     await db_save_session(db, state)
     await append_transcript_event(
@@ -373,8 +411,6 @@ async def _handle_utterance(
     metrics.inc("voice_turns")
     metrics.inc("telephony_utterances_processed")
 
-    resolved_intent = (state.current_intent or VoiceIntent.unknown).value
-
     response = OutboundResponse(
         session_id=state.session_id,
         response_text=response_text,
@@ -388,7 +424,7 @@ async def _handle_utterance(
 
     outbound = adapter.format_outbound(response)
 
-    return {
+    result = {
         "status": "ok",
         "event_id": event.event_id,
         "session_id": state.session_id,
@@ -401,6 +437,10 @@ async def _handle_utterance(
         "dry_run": settings.TELEPHONY_DRY_RUN,
         "outbound": outbound,
     }
+    if shadow:
+        result["shadow_mode"] = True
+        result["shadow_suppressed"] = shadow_suppressed
+    return result
 
 
 async def _handle_call_ended(
@@ -418,7 +458,11 @@ async def _handle_call_ended(
     if state is None:
         state = conversation_manager.get_session(session_id)
     if state is None:
-        return {"status": "ok", "event_id": event.event_id, "message": "Session not found; already cleaned up."}
+        return {
+            "status": "ok",
+            "event_id": event.event_id,
+            "message": "Session not found; already cleaned up.",
+        }
 
     state.status = SessionStatus.completed
     state.touch()
@@ -465,13 +509,19 @@ async def telephony_status() -> dict:
     snap = metrics.snapshot()
     counters = snap.get("counters", {})
 
+    # Determine idempotency backend
+    from app.telephony_adapter import RedisIdempotencyGuard
+    idem_backend = "redis" if isinstance(idempotency_guard, RedisIdempotencyGuard) else "in_memory"
+
     return {
         "enabled": settings.TELEPHONY_ENABLED,
         "dry_run": settings.TELEPHONY_DRY_RUN,
+        "shadow_mode": settings.TELEPHONY_SHADOW_MODE,
         "provider": adapter.provider_name,
         "max_payload_bytes": settings.TELEPHONY_MAX_PAYLOAD_BYTES,
         "event_ttl_hours": settings.TELEPHONY_EVENT_TTL_HOURS,
         "idempotency_guard_size": idempotency_guard.size,
+        "idempotency_backend": idem_backend,
         "counters": {
             "events_received": counters.get("telephony_events_received", 0),
             "calls_started": counters.get("telephony_calls_started", 0),
@@ -480,6 +530,7 @@ async def telephony_status() -> dict:
             "replays_rejected": counters.get("telephony_event_replay_rejected", 0),
             "payload_rejected": counters.get("telephony_payload_rejected", 0),
             "parse_errors": counters.get("telephony_parse_error", 0),
+            "shadow_suppressed": counters.get("telephony_shadow_suppressed", 0),
         },
         "latency": snap.get("latencies", {}).get("telephony_event_ms"),
     }

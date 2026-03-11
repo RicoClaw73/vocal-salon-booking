@@ -1,5 +1,5 @@
 """
-Telephony adapter abstraction layer (Phase 5.3).
+Telephony adapter abstraction layer (Phase 5.3 + 5.4).
 
 Provider-agnostic interface for bridging external telephony call events
 into the vocal-salon voice pipeline.  Two concrete paths:
@@ -14,10 +14,17 @@ Key concepts:
   - ``InboundCallEvent``: canonical inbound event (provider-agnostic).
   - ``OutboundResponse``: canonical outbound response to telephony provider.
   - ``TelephonyAdapter``: abstract interface that concrete adapters implement.
-  - Idempotency guard: ``EventIdempotencyGuard`` de-duplicates by event_id.
+  - Idempotency guard: ``EventIdempotencyGuard`` (in-memory) or
+    ``RedisIdempotencyGuard`` (optional, when REDIS_URL is set).
+
+Phase 5.4 additions:
+  - ``RedisIdempotencyGuard``: Redis-backed idempotency for multi-worker deployments.
+  - ``create_idempotency_guard()``: factory that picks the right backend.
+  - Real Twilio signature verification algorithm.
 
 Design:
   - Local-first default; no paid dependency required.
+  - Redis is optional — graceful fallback to in-memory if unavailable.
   - Backward-compatible: existing /voice/* endpoints are untouched.
   - Reuses existing observability/ops/auth/rate-limit patterns.
 """
@@ -25,6 +32,7 @@ Design:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -171,6 +179,179 @@ class EventIdempotencyGuard:
         self._seen.clear()
 
 
+class RedisIdempotencyGuard:
+    """
+    Redis-backed idempotency guard for multi-worker deployments (Phase 5.4).
+
+    Uses Redis SET-NX with TTL to de-duplicate event IDs across workers.
+    Falls back gracefully to allowing events through if Redis is unreachable
+    (fail-open for availability — duplicates are a lesser evil than dropped calls).
+
+    Requires the ``redis`` extra: ``pip install redis``.
+    """
+
+    def __init__(
+        self,
+        redis_url: str,
+        key_prefix: str = "salon:idem:",
+        ttl_seconds: int = 86400,
+    ) -> None:
+        self._redis_url = redis_url
+        self._key_prefix = key_prefix
+        self._ttl_seconds = ttl_seconds
+        self._redis = None  # Lazy connection
+        self._available = True  # Track if Redis is reachable
+
+    def _get_redis(self):
+        """Lazy-init Redis connection."""
+        if self._redis is None:
+            try:
+                import redis
+                self._redis = redis.from_url(
+                    self._redis_url,
+                    decode_responses=True,
+                    socket_connect_timeout=2,
+                    socket_timeout=2,
+                )
+                # Test connection
+                self._redis.ping()
+                self._available = True
+                _slog.info("redis_idempotency_connected", url=self._redis_url[:20] + "...")
+            except Exception as exc:
+                _slog.warning(
+                    "redis_idempotency_unavailable",
+                    error=str(exc),
+                    action="fail_open",
+                )
+                self._available = False
+                self._redis = None
+        return self._redis
+
+    def check_and_mark(self, event_id: str) -> bool:
+        """
+        Check if an event has already been processed (Redis SET-NX).
+
+        Returns True if the event is **new** (not a replay).
+        Returns False if it's a duplicate (key already exists).
+        On Redis failure, returns True (fail-open).
+        """
+        client = self._get_redis()
+        if client is None:
+            # Redis unavailable — fail open (allow event through)
+            metrics.inc("telephony_redis_fallback")
+            return True
+
+        key = f"{self._key_prefix}{event_id}"
+        try:
+            was_set = client.set(key, "1", nx=True, ex=self._ttl_seconds)
+            if not was_set:
+                metrics.inc("telephony_event_replay_rejected")
+                _slog.warning("telephony_event_replay", event_id=event_id, backend="redis")
+                return False
+            return True
+        except Exception as exc:
+            _slog.warning(
+                "redis_idempotency_error",
+                event_id=event_id,
+                error=str(exc),
+                action="fail_open",
+            )
+            metrics.inc("telephony_redis_fallback")
+            self._available = False
+            self._redis = None  # Force reconnect on next call
+            return True
+
+    def is_known(self, event_id: str) -> bool:
+        """Check if an event ID exists in Redis (without marking)."""
+        client = self._get_redis()
+        if client is None:
+            return False
+        try:
+            return client.exists(f"{self._key_prefix}{event_id}") > 0
+        except Exception:
+            return False
+
+    @property
+    def size(self) -> int:
+        """Approximate count of tracked event IDs in Redis."""
+        client = self._get_redis()
+        if client is None:
+            return 0
+        try:
+            cursor = 0
+            count = 0
+            while True:
+                cursor, keys = client.scan(cursor, match=f"{self._key_prefix}*", count=1000)
+                count += len(keys)
+                if cursor == 0:
+                    break
+            return count
+        except Exception:
+            return 0
+
+    def reset(self) -> None:
+        """Clear all tracked events (for tests). Deletes matching keys."""
+        client = self._get_redis()
+        if client is None:
+            return
+        try:
+            cursor = 0
+            while True:
+                cursor, keys = client.scan(cursor, match=f"{self._key_prefix}*", count=1000)
+                if keys:
+                    client.delete(*keys)
+                if cursor == 0:
+                    break
+        except Exception:
+            pass
+
+    @property
+    def is_available(self) -> bool:
+        """Whether Redis is currently reachable."""
+        return self._available
+
+
+def create_idempotency_guard(
+    redis_url: str = "",
+    key_prefix: str = "salon:idem:",
+    ttl_seconds: int = 86400,
+    ttl_hours: int = 24,
+    max_entries: int = 100_000,
+) -> EventIdempotencyGuard | RedisIdempotencyGuard:
+    """
+    Factory: create the appropriate idempotency guard backend.
+
+    - When ``redis_url`` is non-empty, attempts Redis backend.
+    - Otherwise (or on import failure), falls back to in-memory guard.
+
+    This is called once at module load; the result is used as a singleton.
+    """
+    if redis_url:
+        try:
+            import redis as _redis_check  # noqa: F811
+            del _redis_check  # only needed to verify availability
+            _slog.info(
+                "idempotency_guard_backend",
+                backend="redis",
+                prefix=key_prefix,
+                ttl_seconds=ttl_seconds,
+            )
+            return RedisIdempotencyGuard(
+                redis_url=redis_url,
+                key_prefix=key_prefix,
+                ttl_seconds=ttl_seconds,
+            )
+        except ImportError:
+            _slog.warning(
+                "redis_import_failed",
+                action="falling_back_to_in_memory",
+                hint="Install redis: pip install 'vocal-salon-api[redis]'",
+            )
+
+    _slog.info("idempotency_guard_backend", backend="in_memory", ttl_hours=ttl_hours)
+    return EventIdempotencyGuard(ttl_hours=ttl_hours, max_entries=max_entries)
+
+
 # ── Abstract Adapter Interface ─────────────────────────────────────
 
 
@@ -292,17 +473,29 @@ class LocalAdapter(TelephonyAdapter):
 
 class TwilioAdapter(TelephonyAdapter):
     """
-    Scaffold adapter for Twilio-compatible webhook payloads.
+    Adapter for Twilio-compatible webhook payloads.
 
-    Parses the Twilio webhook contract (simplified) into canonical events.
-    No Twilio SDK dependency — uses plain dict parsing.
+    Parses the Twilio webhook contract into canonical events.
+    No Twilio SDK dependency — uses plain dict parsing + stdlib HMAC.
 
-    In real production, override ``validate_signature`` with Twilio's
-    request signature validation using the auth token.
+    Signature verification implements the real Twilio algorithm:
+      1. Start with the full webhook URL.
+      2. Append POST body parameters sorted by key.
+      3. HMAC-SHA1 of the resulting string with the auth token.
+      4. Base64-encode the digest → must match X-Twilio-Signature header.
+
+    When ``webhook_secret`` is empty, verification is skipped (dev mode).
+    When ``webhook_url`` is empty but secret is set, falls back to simple
+    HMAC-SHA256 of the raw body (backward compat / non-Twilio proxies).
     """
 
-    def __init__(self, webhook_secret: str = "") -> None:
+    def __init__(
+        self,
+        webhook_secret: str = "",
+        webhook_url: str = "",
+    ) -> None:
         self._webhook_secret = webhook_secret
+        self._webhook_url = webhook_url
 
     @property
     def provider_name(self) -> str:
@@ -385,21 +578,95 @@ class TwilioAdapter(TelephonyAdapter):
 
         return result
 
-    def validate_signature(self, raw_body: bytes, signature: str) -> bool:
+    def validate_signature(
+        self,
+        raw_body: bytes,
+        signature: str,
+        *,
+        url: str | None = None,
+        params: dict[str, str] | None = None,
+    ) -> bool:
         """
-        Validate Twilio request signature (scaffold).
+        Validate inbound Twilio webhook signature.
 
-        When webhook_secret is empty, always returns True (dev mode).
-        In production, implement proper Twilio signature validation.
+        **Fail-closed**: when webhook_secret is configured but signature is
+        missing or invalid, returns False.
+
+        **Dev mode**: when webhook_secret is empty, always returns True.
+
+        Two verification modes:
+
+        1. **Real Twilio mode** (url + params provided, or webhook_url configured):
+           Implements Twilio's documented algorithm:
+             - data_to_sign = url + sorted POST params joined as key=value
+             - HMAC-SHA1(auth_token, data_to_sign)
+             - base64-encode the digest
+             - compare with X-Twilio-Signature header
+
+        2. **Simple HMAC mode** (no url / webhook_url):
+           Falls back to HMAC-SHA256 of raw body — useful when running behind
+           a proxy that strips the original URL, or for non-Twilio providers
+           using the Twilio adapter format.
         """
         if not self._webhook_secret:
             return True
-        # Scaffold: HMAC-SHA256 of body with secret
-        import hmac
+
+        # Fail closed: no signature provided when secret is set
+        if not signature:
+            _slog.warning(
+                "twilio_signature_missing",
+                has_secret=True,
+            )
+            return False
+
+        effective_url = url or self._webhook_url
+
+        if effective_url and params is not None:
+            # Real Twilio signature algorithm
+            return _verify_twilio_signature(
+                auth_token=self._webhook_secret,
+                url=effective_url,
+                params=params,
+                signature=signature,
+            )
+
+        # Fallback: simple HMAC-SHA256 of raw body
         expected = hmac.new(
             self._webhook_secret.encode(), raw_body, hashlib.sha256
         ).hexdigest()
         return hmac.compare_digest(expected, signature)
+
+
+def _verify_twilio_signature(
+    auth_token: str,
+    url: str,
+    params: dict[str, str],
+    signature: str,
+) -> bool:
+    """
+    Implement Twilio's request signature validation algorithm.
+
+    Reference: https://www.twilio.com/docs/usage/security#validating-requests
+
+    1. Take the full URL of the request.
+    2. Iterate over POST body parameters sorted alphabetically by key.
+    3. Append each parameter name and value (no separator) to the URL.
+    4. Hash the result with HMAC-SHA1 using the auth token as the key.
+    5. Base64-encode the hash.
+    6. Compare to the X-Twilio-Signature header.
+    """
+    import base64
+
+    # Build data string: URL + sorted params
+    data = url
+    for key in sorted(params.keys()):
+        data += key + params[key]
+
+    # HMAC-SHA1
+    mac = hmac.new(auth_token.encode("utf-8"), data.encode("utf-8"), hashlib.sha1)
+    expected = base64.b64encode(mac.digest()).decode("utf-8")
+
+    return hmac.compare_digest(expected, signature)
 
 
 # ── Concrete: Vapi-Style Webhook Scaffold ──────────────────────────
@@ -514,6 +781,7 @@ _ADAPTER_REGISTRY: dict[str, type[TelephonyAdapter]] = {
 def get_telephony_adapter(
     provider: str = "local",
     webhook_secret: str = "",
+    webhook_url: str = "",
 ) -> TelephonyAdapter:
     """
     Factory to instantiate a telephony adapter by provider name.
@@ -529,12 +797,31 @@ def get_telephony_adapter(
         )
         return LocalAdapter()
 
-    if provider in ("twilio", "vapi"):
+    if provider == "twilio":
+        return cls(webhook_secret=webhook_secret, webhook_url=webhook_url)  # type: ignore[call-arg]
+    if provider == "vapi":
         return cls(webhook_secret=webhook_secret)  # type: ignore[call-arg]
     return cls()
 
 
 # ── Module-level singletons ────────────────────────────────────────
 
-idempotency_guard = EventIdempotencyGuard()
-"""Shared idempotency guard for telephony events."""
+
+def _init_idempotency_guard() -> EventIdempotencyGuard | RedisIdempotencyGuard:
+    """Initialise the idempotency guard from app settings (deferred import)."""
+    try:
+        from app.config import settings
+        return create_idempotency_guard(
+            redis_url=settings.REDIS_URL,
+            key_prefix=settings.REDIS_KEY_PREFIX,
+            ttl_seconds=settings.REDIS_IDEMPOTENCY_TTL_SECONDS,
+            ttl_hours=settings.TELEPHONY_EVENT_TTL_HOURS,
+            max_entries=100_000,
+        )
+    except Exception:
+        # Settings not available (e.g. during isolated import) — safe default
+        return EventIdempotencyGuard()
+
+
+idempotency_guard = _init_idempotency_guard()
+"""Shared idempotency guard for telephony events (in-memory or Redis)."""
