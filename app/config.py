@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     TTS_VOICE_ID: str = ""  # Provider-specific voice ID
     TTS_MODEL: str = ""  # Provider-specific model override
 
+    # ── LLM provider (pilot wiring) ───────────────────────────
+    # NOTE: current intent engine is still rule-based. These settings
+    # prepare GPT/OpenAI wiring for upcoming integration.
+    LLM_PROVIDER: str = "mock"  # mock|openai
+    OPENAI_API_KEY: str = ""
+    LLM_MODEL: str = "gpt-4o"
+
     # ── Security / hardening (Phase 4.3) ──────────────────────
     # Optional API key for voice endpoints.  When empty (default), auth
     # is disabled — convenient for local dev.  Set to a non-empty string
