@@ -196,10 +196,16 @@ async def validate_booking_request(
         pause_start = _dt(start_time.date(), _parse_time(pause["debut"]))
         pause_end = _dt(start_time.date(), _parse_time(pause["fin"]))
         if start_time < pause_end and end_time > pause_start:
-            return False, f"Le créneau chevauche la pause de {employee.prenom} ({pause['debut']}-{pause['fin']}).", None
+            msg = (
+                f"Le créneau chevauche la pause de {employee.prenom} "
+                f"({pause['debut']}-{pause['fin']})."
+            )
+            return False, msg, None
 
     # Conflict check (with buffer)
-    buffer_min = settings.CHEMICAL_BUFFER_MIN if service.is_chemical else settings.DEFAULT_BUFFER_MIN
+    buffer_min = (
+        settings.CHEMICAL_BUFFER_MIN if service.is_chemical else settings.DEFAULT_BUFFER_MIN
+    )
     buffered_end = end_time + timedelta(minutes=buffer_min)
     has_conflict = await check_booking_conflict(
         session, employee_id, start_time, buffered_end, exclude_booking_id
@@ -213,7 +219,8 @@ async def validate_booking_request(
         session, employee_id, start_time, buffer_before, exclude_booking_id
     )
     if pre_conflict:
-        return False, f"Créneau trop proche d'un rendez-vous précédent (buffer {buffer_min}min requis).", None
+        msg = f"Créneau trop proche d'un RDV précédent (buffer {buffer_min}min requis)."
+        return False, msg, None
 
     return True, "OK", end_time
 

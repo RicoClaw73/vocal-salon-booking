@@ -22,16 +22,15 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from app.demo.scenarios import Scenario, ScenarioStep, load_scenarios, get_scenario_by_id
+from app.demo.scenarios import Scenario, get_scenario_by_id, load_scenarios
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +104,7 @@ class DemoRunResult:
         lines.append("")
 
         if self.greeting:
-            lines.append(f"## Greeting")
+            lines.append("## Greeting")
             lines.append(f"> {self.greeting}")
             lines.append("")
 
@@ -116,13 +115,15 @@ class DemoRunResult:
             action_icon = "✅" if t.action_match is not False else "❌"
             lines.append(f"### Turn {t.turn_number}: {t.step_description}")
             lines.append(f"- **User**: {t.user_text}")
-            lines.append(f"- **Agent**: {t.response_text[:200]}{'…' if len(t.response_text) > 200 else ''}")
+            preview = t.response_text[:200]
+            ellipsis = "…" if len(t.response_text) > 200 else ""
+            lines.append(f"- **Agent**: {preview}{ellipsis}")
             lines.append(f"- **Intent**: `{t.intent}` (conf={t.confidence:.1f}) {intent_icon}")
             if t.action_taken:
                 lines.append(f"- **Action**: `{t.action_taken}` {action_icon}")
             lines.append(f"- **Latency**: {t.latency_ms:.0f}ms")
             if t.is_fallback:
-                lines.append(f"- ⚠️ *Fallback triggered*")
+                lines.append("- ⚠️ *Fallback triggered*")
             lines.append("")
 
         if self.goodbye_message:
@@ -344,7 +345,9 @@ class DemoOrchestrator:
 
 # ── Artifact persistence ──────────────────────────────────────
 
-def save_artifacts(result: DemoRunResult, output_dir: str | Path = "demo_output") -> dict[str, Path]:
+def save_artifacts(
+    result: DemoRunResult, output_dir: str | Path = "demo_output",
+) -> dict[str, Path]:
     """
     Save JSON transcript + Markdown summary to *output_dir*.
 

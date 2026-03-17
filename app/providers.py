@@ -22,9 +22,8 @@ from __future__ import annotations
 import hashlib
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -427,8 +426,8 @@ def get_stt_provider(provider: str = "mock", **kwargs) -> STTProvider:
         )
         return MockSTTProvider()
 
-    # Filter kwargs to only those the constructor accepts
-    return cls(**{k: v for k, v in kwargs.items() if v})  # noqa: E501 (stt)
+    # Only pass required kwargs to avoid TypeError on simple providers (e.g. mock)
+    return cls(**{k: v for k, v in kwargs.items() if v and k in required})
 
 
 def get_tts_provider(provider: str = "mock", **kwargs) -> TTSProvider:
@@ -461,7 +460,8 @@ def get_tts_provider(provider: str = "mock", **kwargs) -> TTSProvider:
         )
         return MockTTSProvider()
 
-    return cls(**{k: v for k, v in kwargs.items() if v})
+    # Only pass required kwargs to avoid TypeError on simple providers (e.g. mock)
+    return cls(**{k: v for k, v in kwargs.items() if v and k in required})
 
 
 # ── Provider Readiness (Phase 5.1) ─────────────────────────

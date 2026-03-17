@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+from pydantic import BaseModel, Field, ValidationError
 
 from app.config import settings
 from app.voice_schemas import VoiceIntent
@@ -32,6 +33,17 @@ LLM_TIMEOUT_SECONDS: float = 5.0  # Aggressive timeout — voice pipeline is lat
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
 _VALID_INTENTS = {e.value for e in VoiceIntent}
+
+
+# ── Response schema (Pydantic validation) ──────────────────
+
+class _LLMResponseSchema(BaseModel):
+    """Expected shape of the JSON returned by the LLM."""
+
+    intent: str
+    confidence: float = Field(ge=0.0, le=1.0, default=0.5)
+    entities: dict[str, Any] = Field(default_factory=dict)
+
 
 # ── System prompt ───────────────────────────────────────────
 
@@ -124,6 +136,13 @@ def _parse_llm_response(raw_text: str) -> dict[str, Any]:
     parsed = json.loads(text)
     if not isinstance(parsed, dict):
         raise LLMResponseError(f"Expected JSON object, got {type(parsed).__name__}")
+
+    # Validate structure via Pydantic — catches missing/bad fields early
+    try:
+        _LLMResponseSchema.model_validate(parsed)
+    except ValidationError as exc:
+        raise LLMResponseError(f"LLM response schema validation failed: {exc}") from exc
+
     return parsed
 
 

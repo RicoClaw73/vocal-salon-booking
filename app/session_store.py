@@ -23,7 +23,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.conversation import ConversationState
 from app.models import TranscriptEvent, VoiceSession

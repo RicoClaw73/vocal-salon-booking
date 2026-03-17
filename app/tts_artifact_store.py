@@ -69,7 +69,17 @@ class TTSArtifactStore:
         session_dir = self._root / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
         file_path = session_dir / f"{h}.{audio_format}"
-        file_path.write_bytes(audio_bytes)
+        try:
+            file_path.write_bytes(audio_bytes)
+        except OSError as exc:
+            _slog.error(
+                "tts_artifact_write_failed",
+                session_id=session_id,
+                text_hash=h,
+                path=str(file_path),
+                error=str(exc),
+            )
+            raise
         _slog.debug(
             "tts_artifact_stored",
             session_id=session_id,

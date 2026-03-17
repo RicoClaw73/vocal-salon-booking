@@ -16,19 +16,17 @@ They sit behind the same API-key guard as voice endpoints.
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.auth import require_api_key
 from app.circuit_breaker import stt_circuit_breaker, tts_circuit_breaker
 from app.config import settings
 from app.database import get_db
-from app.models import Booking, BookingStatus, TranscriptEvent, VoiceSession
+from app.models import TranscriptEvent, VoiceSession
 from app.observability import metrics
 from app.providers import check_provider_readiness
 from app.smoke_test import run_smoke_test

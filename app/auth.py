@@ -17,7 +17,7 @@ Usage::
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Request, Security
+from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
 
 from app.config import settings

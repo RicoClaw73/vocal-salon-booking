@@ -85,7 +85,7 @@ async def _run(args: argparse.Namespace) -> int:
     if failed:
         print(f"  ❌ {failed} scenario(s) had assertion failures")
     else:
-        print(f"  ✅ All scenarios passed!")
+        print("  ✅ All scenarios passed!")
     print(f"Artifacts saved to: {args.output}/")
 
     return 0 if all_pass else 1

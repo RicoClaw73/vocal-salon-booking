@@ -53,10 +53,14 @@ async def setup_db():
     tts_circuit_breaker.reset()
     idempotency_guard.reset()
 
-    # Disable LLM provider in tests to prevent real API calls.
-    # Tests that need LLM should mock classify_intent_llm explicitly.
+    # Force mock providers in tests to prevent real API calls and ensure
+    # deterministic behaviour.  Tests needing real providers should override.
     _orig_llm_provider = settings.LLM_PROVIDER
+    _orig_stt_provider = settings.STT_PROVIDER
+    _orig_tts_provider = settings.TTS_PROVIDER
     settings.LLM_PROVIDER = "mock"
+    settings.STT_PROVIDER = "mock"
+    settings.TTS_PROVIDER = "mock"
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with test_session_factory() as session:
@@ -66,6 +70,8 @@ async def setup_db():
         await conn.run_sync(Base.metadata.drop_all)
     _reset_buckets()
     settings.LLM_PROVIDER = _orig_llm_provider
+    settings.STT_PROVIDER = _orig_stt_provider
+    settings.TTS_PROVIDER = _orig_tts_provider
 
 
 async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:

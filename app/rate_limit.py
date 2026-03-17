@@ -21,11 +21,11 @@ Usage::
 
 from __future__ import annotations
 
-import time
 import logging
+import time
 from collections import defaultdict
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 
 from app.config import settings
 from app.observability import metrics

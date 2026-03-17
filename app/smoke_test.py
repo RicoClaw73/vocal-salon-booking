@@ -22,7 +22,6 @@ This ensures default CI stays fully secret-free.
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 
 from app.config import settings

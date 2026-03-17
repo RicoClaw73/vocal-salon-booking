@@ -30,7 +30,10 @@ async def search_availability(
     try:
         target_date = date.fromisoformat(date_str)
     except ValueError:
-        raise HTTPException(status_code=422, detail=f"Format de date invalide: '{date_str}'. Attendu: YYYY-MM-DD")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Format de date invalide: '{date_str}'. Attendu: YYYY-MM-DD",
+        )
 
     result = await find_available_slots(
         session=db,

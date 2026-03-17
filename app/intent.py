@@ -40,11 +40,16 @@ class IntentResult:
 
 _FLAGS = re.IGNORECASE | re.UNICODE
 
+_SERVICES_RE = r"coupe|coiffure|couleur|balayage|mèche|brushing|soin|chignon|mariage|barbe"
+
 _BOOK_PATTERNS: list[re.Pattern] = [
     re.compile(r"(réserv|prendre|book|rdv|rendez[\s-]?vous|appointment)", _FLAGS),
-    re.compile(r"(je\s+vou[sd]rais|j['\u2019]aimerais|i['\u2019]?d?\s*like).*(coupe|coiffure|couleur|balayage|mèche|brushing|soin|chignon|mariage|barbe)", _FLAGS),
+    re.compile(
+        rf"(je\s+vou[sd]rais|j['\u2019]aimerais|i['\u2019]?d?\s*like).*({_SERVICES_RE})",
+        _FLAGS,
+    ),
     # "disponibilités pour un [service]" implies booking intent
-    re.compile(r"(disponib).*(coupe|coiffure|couleur|balayage|mèche|brushing|soin|chignon|mariage|barbe)", _FLAGS),
+    re.compile(rf"(disponib).*({_SERVICES_RE})", _FLAGS),
 ]
 
 _RESCHEDULE_PATTERNS: list[re.Pattern] = [
@@ -140,7 +145,9 @@ def extract_intent(text: str) -> IntentResult:
 
     # Availability check — informational queries
     if any(p.search(text) for p in _AVAILABILITY_PATTERNS):
-        return IntentResult(intent=VoiceIntent.check_availability, confidence=1.0, entities=entities)
+        return IntentResult(
+            intent=VoiceIntent.check_availability, confidence=1.0, entities=entities,
+        )
 
     return IntentResult(intent=VoiceIntent.unknown, confidence=0.0, entities=entities)
 
@@ -175,7 +182,8 @@ def _extract_entities(text: str) -> dict:
 
     # Service keywords (check longest keywords first to avoid partial matches)
     text_lower = text.lower()
-    for keyword, category in sorted(_SERVICE_KEYWORDS.items(), key=lambda x: len(x[0]), reverse=True):
+    sorted_kw = sorted(_SERVICE_KEYWORDS.items(), key=lambda x: len(x[0]), reverse=True)
+    for keyword, category in sorted_kw:
         if keyword in text_lower:
             entities["service_keyword"] = keyword
             entities["service_category"] = category

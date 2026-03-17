@@ -8,8 +8,8 @@ tool-call payloads described in docs/N8N_WORKFLOW_REDESIGN.md.
 from __future__ import annotations
 
 from datetime import datetime
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 
 # ── Service ──────────────────────────────────────────────────
 

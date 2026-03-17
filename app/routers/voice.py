@@ -53,16 +53,20 @@ from app.providers import (
 from app.rate_limit import rate_limit_dependency
 from app.session_store import (
     append_transcript_event,
-    create_session as db_create_session,
     get_transcript_events,
+)
+from app.session_store import (
+    create_session as db_create_session,
+)
+from app.session_store import (
     load_session as db_load_session,
+)
+from app.session_store import (
     save_session as db_save_session,
 )
 from app.slot_engine import find_available_slots, validate_booking_request
-from app.tts_artifact_store import tts_artifact_store
 from app.voice_schemas import (
     AudioMeta,
-    BookingDraft,
     SessionEndRequest,
     SessionEndResponse,
     SessionStartRequest,
@@ -499,10 +503,12 @@ async def voice_turn(
     # 3. STT step (with circuit-breaker + error classification + auto-fallback)
     #    When audio_bytes are present, route through the real STT provider.
     #    When only text is provided, pass encoded text (mock-friendly path).
-    from app.providers import AudioFormat as _AF
+    from app.providers import AudioFormat
 
     stt_input_bytes = audio_bytes if audio_bytes is not None else user_text.encode("utf-8")
-    stt_audio_format = _AF(audio_fmt_str) if audio_fmt_str in _AF.__members__ else _AF.wav
+    stt_audio_format = (
+        AudioFormat(audio_fmt_str) if audio_fmt_str in AudioFormat.__members__ else AudioFormat.wav
+    )
     stt_sample_rate = payload.audio_sample_rate or 16000
 
     stt_cb = _get_circuit_breaker("stt")
@@ -522,7 +528,7 @@ async def voice_turn(
         stt_outcome = ProviderOutcome(
             success=True,
             error_kind=ProviderErrorKind.fallback_used,
-            error_detail=f"circuit_breaker_open (cooldown {stt_cb.snapshot()['current_cooldown_s']}s)",
+            error_detail=f"circuit_breaker_open (cooldown {stt_cb.snapshot()['current_cooldown_s']}s)",  # noqa: E501
             fallback_used=True,
         )
         metrics.inc("cb_stt_short_circuit")
@@ -550,10 +556,8 @@ async def voice_turn(
     has_active_intent = (
         state.current_intent is not None and state.current_intent != VoiceIntent.unknown
     )
-    is_fallback = False
     if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) \
             and not has_active_intent:
-        is_fallback = True
         consecutive = getattr(state, "_consecutive_fallbacks", 0) + 1
         state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
 
@@ -576,7 +580,7 @@ async def voice_turn(
             tts_outcome = ProviderOutcome(
                 success=True,
                 error_kind=ProviderErrorKind.fallback_used,
-                error_detail=f"circuit_breaker_open (cooldown {tts_cb.snapshot()['current_cooldown_s']}s)",
+                error_detail=f"circuit_breaker_open (cooldown {tts_cb.snapshot()['current_cooldown_s']}s)",  # noqa: E501
                 fallback_used=True,
             )
             metrics.inc("cb_tts_short_circuit")
@@ -662,7 +666,7 @@ async def voice_turn(
         tts_outcome = ProviderOutcome(
             success=True,
             error_kind=ProviderErrorKind.fallback_used,
-            error_detail=f"circuit_breaker_open (cooldown {tts_cb.snapshot()['current_cooldown_s']}s)",
+            error_detail=f"circuit_breaker_open (cooldown {tts_cb.snapshot()['current_cooldown_s']}s)",  # noqa: E501
             fallback_used=True,
         )
         metrics.inc("cb_tts_short_circuit")
@@ -865,7 +869,8 @@ async def _handle_reschedule(
     if booking.status != BookingStatus.confirmed:
         return (
             f"Impossible de modifier la réservation #{booking_id} "
-            f"(statut : {booking.status.value if hasattr(booking.status, 'value') else booking.status}).",
+            f"(statut : "
+            f"{booking.status.value if hasattr(booking.status, 'value') else booking.status}).",
             "booking_not_modifiable",
             None,
         )

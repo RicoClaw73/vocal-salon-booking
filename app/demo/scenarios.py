@@ -12,11 +12,10 @@ can be loaded from a JSON file via ``load_scenarios_from_file``.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
-
 
 # ── Data model ────────────────────────────────────────────────
 

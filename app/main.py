@@ -21,7 +21,6 @@ from app.database import async_session, engine
 from app.models import Base
 from app.observability import metrics
 from app.routers import availability, bookings, employees, ops, services, telephony, voice
-from app.schemas import HealthOut
 from app.seed import seed_all
 
 logging.basicConfig(level=logging.INFO)
