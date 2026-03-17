@@ -26,7 +26,7 @@ import logging
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -36,7 +36,7 @@ from app.config import settings
 from app.conversation import ConversationState, conversation_manager
 from app.database import get_db
 from app.intent import extract_intent_async
-from app.models import Booking, BookingStatus, Service
+from app.models import Booking, BookingStatus, Employee, EmployeeCompetency, Service
 from app.observability import StructuredLogger, metrics, new_request_id
 from app.providers import (
     MockSTTProvider,
@@ -756,6 +756,34 @@ async def _handle_book(
 
     # All required fields present → search availability
     draft = state.booking_draft
+
+    # Resolve employee name → employee_id if a preference was expressed
+    if draft.employee_name and not draft.employee_id:
+        emp = await _resolve_employee(db, draft.employee_name)
+        if emp is None:
+            return (
+                f"Je ne connais pas de coiffeur(se) nommé(e) '{draft.employee_name}'. "
+                "Nos coiffeurs sont : Sophie, Karim, Léa, Hugo et Amira. "
+                "Souhaitez-vous continuer sans préférence ?",
+                "employee_not_found",
+                None,
+            )
+        # Verify this employee can perform the requested service
+        comp_result = await db.execute(
+            select(EmployeeCompetency)
+            .where(EmployeeCompetency.employee_id == emp.id)
+            .where(EmployeeCompetency.service_id == draft.service_id)
+        )
+        if comp_result.scalars().first() is None:
+            return (
+                f"{emp.prenom} ne propose pas ce service. "
+                "Souhaitez-vous qu'un autre coiffeur s'en charge, "
+                "ou préférez-vous choisir un autre service ?",
+                "employee_not_competent",
+                None,
+            )
+        state.update_draft(employee_id=emp.id)
+
     try:
         target_date = date.fromisoformat(draft.date)
     except (ValueError, TypeError):
@@ -1104,12 +1132,21 @@ def _merge_entities_to_draft(state: ConversationState, entities: dict) -> None:
     mapping = {
         "date": "date",
         "time": "time",
+        "employee_name": "employee_name",
         "service_keyword": None,  # handled separately
         "service_category": None,
     }
     for entity_key, draft_key in mapping.items():
         if draft_key and entity_key in entities:
             state.update_draft(**{draft_key: entities[entity_key]})
+
+
+async def _resolve_employee(db: AsyncSession, name: str) -> Employee | None:
+    """Find an employee by first name (case-insensitive)."""
+    result = await db.execute(
+        select(Employee).where(func.lower(Employee.prenom) == name.lower())
+    )
+    return result.scalars().first()
 
 
 async def _resolve_service(

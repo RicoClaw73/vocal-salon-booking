@@ -82,6 +82,16 @@ _BOOKING_ID_PATTERN = re.compile(
     r"\b(?:réservation|booking|rdv|rendez[\s-]?vous)\s*#?\s*(\d+)\b", re.IGNORECASE
 )
 
+# Employee first-name → display-name mapping (case-insensitive lookup)
+_EMPLOYEE_FIRST_NAMES: dict[str, str] = {
+    "sophie": "Sophie",
+    "karim": "Karim",
+    "léa": "Léa",
+    "lea": "Léa",
+    "hugo": "Hugo",
+    "amira": "Amira",
+}
+
 # Service keyword → service_id prefix mapping (fuzzy match for MVP)
 _SERVICE_KEYWORDS: dict[str, str] = {
     "coupe": "coupe",
@@ -195,6 +205,12 @@ def _extract_entities(text: str) -> dict:
     elif re.search(r"\b(femme|woman|féminin|madame|fille)\b", text_lower):
         entities["genre"] = "F"
 
+    # Employee preference ("avec Sophie", "je veux Léa", "Karim si possible", etc.)
+    for normalized, display in _EMPLOYEE_FIRST_NAMES.items():
+        if re.search(rf"\b{re.escape(normalized)}\b", text_lower):
+            entities["employee_name"] = display
+            break
+
     # Hair length hints
     if re.search(r"(courts?\b|short)", text_lower):
         entities["longueur"] = "court"
@@ -258,6 +274,8 @@ async def extract_intent_async(text: str) -> IntentResult:
             merged_entities["booking_id"] = int(llm_ent["booking_id"])
         except (TypeError, ValueError):
             pass  # Keep rule-based booking_id if LLM gave garbage
+    if "employee" in llm_ent and llm_ent["employee"]:
+        merged_entities.setdefault("employee_name", llm_ent["employee"])
 
     return IntentResult(
         intent=llm_result.intent,
