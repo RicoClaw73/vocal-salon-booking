@@ -21,11 +21,13 @@ Key design decisions:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audio_store import synthesize_to_file
 from app.config import settings
 from app.conversation import conversation_manager
 from app.database import get_db
@@ -91,6 +93,37 @@ def _gather_action(request: Request) -> str:
 
 def _voice_url(request: Request) -> str:
     return f"{_base_url(request)}/api/v1/twilio/voice"
+
+
+async def _tts(
+    text: str,
+    request: Request,
+    session_id: str,
+    turn: int,
+) -> str | None:
+    """
+    Generate TTS audio via ElevenLabs and return its public URL.
+
+    Returns None if ElevenLabs is not configured or generation fails.
+    Caller should fall back to Twilio <Say> in that case.
+    """
+    if not settings.ELEVENLABS_API_KEY:
+        return None
+
+    audio_dir = Path(settings.AUDIO_DIR)
+    filename = await synthesize_to_file(
+        text=text,
+        audio_dir=audio_dir,
+        api_key=settings.ELEVENLABS_API_KEY,
+        session_id=session_id,
+        turn=turn,
+        voice_id=settings.ELEVENLABS_VOICE_ID,
+        model=settings.ELEVENLABS_MODEL,
+    )
+    if filename is None:
+        return None
+
+    return f"{_base_url(request)}/audio/{filename}"
 
 
 async def _verify_signature(request: Request, params: dict[str, str]) -> None:
@@ -177,14 +210,21 @@ async def twilio_voice(
     metrics.inc("telephony_calls_started")
     metrics.inc("sessions_started")
 
+    # Try ElevenLabs TTS for greeting, fall back to Twilio <Say>
+    audio_url = await _tts(_GREETING, request, call_sid, 0)
+
     twiml = TwiML()
-    twiml.gather(
+    gather = twiml.gather(
         action=_gather_action(request),
         input="speech",
         language=_LANG,
         timeout="5",
         speech_timeout="auto",
-    ).say(_GREETING, voice=_VOICE, language=_LANG)
+    )
+    if audio_url:
+        gather.play(audio_url)
+    else:
+        gather.say(_GREETING, voice=_VOICE, language=_LANG)
     twiml.redirect(_voice_url(request))
 
     return twiml.response()
@@ -322,6 +362,9 @@ async def twilio_gather(
     metrics.inc("voice_turns")
     metrics.inc("telephony_utterances_processed")
 
+    # Try ElevenLabs TTS, fall back to Twilio <Say>
+    audio_url = await _tts(response_text, request, call_sid, state.turns)
+
     # Build TwiML response
     should_end = action_taken in (
         "human_transfer_offered",
@@ -332,20 +375,29 @@ async def twilio_gather(
     twiml = TwiML()
 
     if action_taken == "human_transfer_offered" and settings.TWILIO_TRANSFER_NUMBER:
-        # Real transfer to human
-        twiml.say(response_text, voice=_VOICE, language=_LANG)
+        if audio_url:
+            twiml.play(audio_url)
+        else:
+            twiml.say(response_text, voice=_VOICE, language=_LANG)
         twiml.dial(settings.TWILIO_TRANSFER_NUMBER)
     elif should_end:
-        twiml.say(response_text, voice=_VOICE, language=_LANG)
+        if audio_url:
+            twiml.play(audio_url)
+        else:
+            twiml.say(response_text, voice=_VOICE, language=_LANG)
         twiml.hangup()
     else:
-        twiml.gather(
+        gather = twiml.gather(
             action=_gather_action(request),
             input="speech",
             language=_LANG,
             timeout="5",
             speech_timeout="auto",
-        ).say(response_text, voice=_VOICE, language=_LANG)
+        )
+        if audio_url:
+            gather.play(audio_url)
+        else:
+            gather.say(response_text, voice=_VOICE, language=_LANG)
         twiml.redirect(_voice_url(request))
 
     return twiml.response()

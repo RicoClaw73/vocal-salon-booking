@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     TTS_VOICE_ID: str = ""  # Provider-specific voice ID
     TTS_MODEL: str = ""  # Provider-specific model override
 
+    # ── ElevenLabs TTS (Phase 5) ──────────────────────────────
+    ELEVENLABS_API_KEY: str = ""
+    ELEVENLABS_VOICE_ID: str = ""   # Default: Sarah (multilingual)
+    ELEVENLABS_MODEL: str = ""      # Default: eleven_turbo_v2_5
+
+    # Audio file storage for Twilio <Play> delivery
+    AUDIO_DIR: str = "audio"        # Relative to project root (or absolute)
+    AUDIO_MAX_AGE_HOURS: int = 1    # Delete files older than this
+
     # ── LLM provider (pilot wiring) ───────────────────────────
     # NOTE: current intent engine is still rule-based. These settings
     # prepare GPT/OpenAI wiring for upcoming integration.

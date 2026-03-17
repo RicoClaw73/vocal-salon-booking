@@ -42,6 +42,12 @@ class Gather:
         el.text = text
         return self
 
+    def play(self, url: str) -> "Gather":
+        """Add a <Play> inside the <Gather> (ElevenLabs audio URL)."""
+        el = SubElement(self._el, "Play")
+        el.text = url
+        return self
+
 
 class TwiML:
     """
