@@ -26,6 +26,7 @@ from app.models import Base
 from app.observability import metrics
 from app.routers import availability, bookings, employees, ops, services, telephony, voice
 from app.routers import twilio_router
+from app.routers.twilio_router import warm_greeting_cache
 from app.seed import seed_all
 
 logging.basicConfig(level=logging.INFO)
@@ -51,6 +52,14 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     audio_dir.mkdir(parents=True, exist_ok=True)
     deleted = cleanup_old_files(audio_dir, settings.AUDIO_MAX_AGE_HOURS)
     logger.info("Audio store ready: %s (cleaned %d old files)", audio_dir, deleted)
+
+    # Pre-generate greeting to eliminate first-call ElevenLabs latency
+    await warm_greeting_cache(
+        audio_dir=audio_dir,
+        api_key=settings.ELEVENLABS_API_KEY,
+        voice_id=settings.ELEVENLABS_VOICE_ID,
+        model=settings.ELEVENLABS_MODEL,
+    )
 
     # Background cleanup task (runs every hour)
     cleanup_task = asyncio.create_task(

@@ -48,6 +48,9 @@ _slog = StructuredLogger(__name__)
 
 router = APIRouter(prefix="/twilio", tags=["twilio"])
 
+# Pre-cached greeting filename (set at startup by warm_greeting_cache)
+_cached_greeting_filename: str | None = None
+
 # ── Constants ────────────────────────────────────────────────
 
 _GREETING = (
@@ -65,6 +68,40 @@ _LANG = "fr-FR"
 
 
 # ── Helpers ──────────────────────────────────────────────────
+
+
+async def warm_greeting_cache(
+    audio_dir: Path,
+    api_key: str,
+    voice_id: str = "",
+    model: str = "",
+) -> None:
+    """
+    Pre-generate the greeting MP3 at startup and cache the filename.
+
+    Saves to audio_dir/greeting.mp3 (fixed name, excluded from TTL cleanup).
+    Falls back gracefully if ElevenLabs is not configured or unavailable.
+    """
+    global _cached_greeting_filename
+
+    if not api_key:
+        return
+
+    fname = await synthesize_to_file(
+        text=_GREETING,
+        audio_dir=audio_dir,
+        api_key=api_key,
+        session_id="greeting",
+        turn=0,
+        voice_id=voice_id,
+        model=model,
+        filename="greeting.mp3",
+    )
+    if fname:
+        _cached_greeting_filename = fname
+        logger.info("Greeting pre-cached: %s", fname)
+    else:
+        logger.warning("Greeting pre-cache failed — will generate on first call")
 
 
 def _get_adapter() -> TwilioAdapter:
@@ -210,8 +247,11 @@ async def twilio_voice(
     metrics.inc("telephony_calls_started")
     metrics.inc("sessions_started")
 
-    # Try ElevenLabs TTS for greeting, fall back to Twilio <Say>
-    audio_url = await _tts(_GREETING, request, call_sid, 0)
+    # Use pre-cached greeting if available, else generate on-the-fly
+    if _cached_greeting_filename:
+        audio_url: str | None = f"{_base_url(request)}/audio/{_cached_greeting_filename}"
+    else:
+        audio_url = await _tts(_GREETING, request, call_sid, 0)
 
     twiml = TwiML()
     gather = twiml.gather(

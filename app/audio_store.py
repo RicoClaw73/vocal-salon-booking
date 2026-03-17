@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 _ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech"
 _DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"   # Sarah — à remplacer par une voix FR
-_DEFAULT_MODEL = "eleven_multilingual_v2"      # Meilleure qualité pour le français
+_DEFAULT_MODEL = "eleven_turbo_v2_5"           # Turbo : 2-3x plus rapide, qualité suffisante pour téléphonie
 
 
 async def synthesize_to_file(
@@ -41,6 +41,7 @@ async def synthesize_to_file(
     turn: int,
     voice_id: str = "",
     model: str = "",
+    filename: str | None = None,
 ) -> str | None:
     """
     Call ElevenLabs, save MP3 to disk, return the filename.
@@ -73,9 +74,10 @@ async def synthesize_to_file(
 
         # Save to disk
         audio_dir.mkdir(parents=True, exist_ok=True)
-        ts = int(time.time())
-        sid_short = session_id[:8].replace("/", "_")
-        filename = f"{ts}_{sid_short}_{turn}.mp3"
+        if not filename:
+            ts = int(time.time())
+            sid_short = session_id[:8].replace("/", "_")
+            filename = f"{ts}_{sid_short}_{turn}.mp3"
         filepath = audio_dir / filename
         filepath.write_bytes(audio_bytes)
         logger.info("TTS saved: %s (%d bytes)", filename, len(audio_bytes))
@@ -107,6 +109,9 @@ def cleanup_old_files(audio_dir: Path, max_age_hours: int = 1) -> int:
     cutoff = time.time() - (max_age_hours * 3600)
     deleted = 0
     for f in audio_dir.glob("*.mp3"):
+        # Skip files that don't start with a unix timestamp (e.g. greeting.mp3)
+        if not f.name[0].isdigit():
+            continue
         try:
             if f.stat().st_mtime < cutoff:
                 f.unlink()
