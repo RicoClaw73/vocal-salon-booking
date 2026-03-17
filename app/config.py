@@ -99,6 +99,12 @@ class Settings(BaseSettings):
     # Event retention: max age (hours) before processed-event IDs are pruned.
     TELEPHONY_EVENT_TTL_HOURS: int = 24
 
+    # ── Twilio credentials (Phase 5 — real integration) ─────────
+    TWILIO_ACCOUNT_SID: str = ""   # ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    TWILIO_AUTH_TOKEN: str = ""    # Used for webhook signature verification
+    TWILIO_PHONE_NUMBER: str = ""  # Your Twilio number e.g. +33XXXXXXXXX
+    TWILIO_TRANSFER_NUMBER: str = "" # Human fallback number (optional)
+
     # ── Telephony – Phase 5.4: Pilot real-call flow ───────────
     # Twilio webhook URL for signature verification (must match the URL
     # configured in the Twilio console).  Only used when TELEPHONY_PROVIDER=twilio

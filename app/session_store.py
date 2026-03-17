@@ -112,9 +112,14 @@ async def create_session(
     client_name: str | None = None,
     client_phone: str | None = None,
     channel: str = "phone",
+    session_id: str | None = None,
 ) -> ConversationState:
-    """Create a new voice session and persist it to the database."""
-    session_id = uuid.uuid4().hex[:12]
+    """Create a new voice session and persist it to the database.
+
+    Pass ``session_id`` to use a specific ID (e.g. Twilio CallSid) instead
+    of the auto-generated one.
+    """
+    session_id = session_id or uuid.uuid4().hex[:12]
     now = datetime.now(timezone.utc)
     row = VoiceSession(
         session_id=session_id,

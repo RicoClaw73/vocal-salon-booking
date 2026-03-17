@@ -21,6 +21,7 @@ from app.database import async_session, engine
 from app.models import Base
 from app.observability import metrics
 from app.routers import availability, bookings, employees, ops, services, telephony, voice
+from app.routers import twilio_router
 from app.seed import seed_all
 
 logging.basicConfig(level=logging.INFO)
@@ -60,6 +61,7 @@ app.include_router(bookings.router, prefix=API_PREFIX)
 app.include_router(voice.router, prefix=API_PREFIX)
 app.include_router(ops.router, prefix=API_PREFIX)
 app.include_router(telephony.router, prefix=API_PREFIX)
+app.include_router(twilio_router.router, prefix=API_PREFIX)
 
 
 # ── Health ──────────────────────────────────────────────────

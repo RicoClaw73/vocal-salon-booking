@@ -154,7 +154,7 @@ async def telephony_inbound(
 
     # 4. Signature verification (provider-specific, no-op for local)
     adapter = _get_adapter()
-    signature = request.headers.get("X-Telephony-Signature", "")
+    signature = request.headers.get("X-Twilio-Signature", "")
     if not adapter.validate_signature(body, signature):
         metrics.inc("telephony_signature_invalid")
         _slog.warning("telephony_signature_invalid", request_id=rid, provider=adapter.provider_name)
