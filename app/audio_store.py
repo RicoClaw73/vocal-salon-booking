@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 # ── ElevenLabs API ───────────────────────────────────────────
 
 _ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech"
-_DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"   # Sarah — multilingual
-_DEFAULT_MODEL = "eleven_turbo_v2_5"           # Faster, good for real-time
+_DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"   # Sarah — à remplacer par une voix FR
+_DEFAULT_MODEL = "eleven_multilingual_v2"      # Meilleure qualité pour le français
 
 
 async def synthesize_to_file(
