@@ -309,7 +309,7 @@ class ElevenLabsTTSProvider(TTSProvider):
     """
 
     ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech"
-    DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"  # "Sarah" multilingual voice
+    DEFAULT_VOICE_ID = "lvQdCgwZfBuOzxyV5pxu"
 
     def __init__(
         self,

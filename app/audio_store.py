@@ -74,7 +74,7 @@ def normalize_for_tts(text: str) -> str:
 # ── ElevenLabs API ───────────────────────────────────────────
 
 _ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech"
-_DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"   # Sarah — à remplacer par une voix FR
+_DEFAULT_VOICE_ID = "lvQdCgwZfBuOzxyV5pxu"
 _DEFAULT_MODEL = "eleven_turbo_v2_5"           # Turbo : 2-3x plus rapide, qualité suffisante pour téléphonie
 
 

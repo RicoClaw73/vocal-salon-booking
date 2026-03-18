@@ -59,7 +59,7 @@ class Settings(BaseSettings):
 
     # ── ElevenLabs TTS (Phase 5) ──────────────────────────────
     ELEVENLABS_API_KEY: str = ""
-    ELEVENLABS_VOICE_ID: str = ""   # Default: Sarah (multilingual)
+    ELEVENLABS_VOICE_ID: str = "lvQdCgwZfBuOzxyV5pxu"
     ELEVENLABS_MODEL: str = ""      # Default: eleven_turbo_v2_5
 
     # Audio file storage for Twilio <Play> delivery

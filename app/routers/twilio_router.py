@@ -443,8 +443,6 @@ async def twilio_gather(
     should_end = action_taken in (
         "human_transfer_offered",
         "session_ended",
-        "booking_confirmed",
-        "create_booking",
     )
 
     twiml = TwiML()
