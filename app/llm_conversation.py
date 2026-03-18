@@ -142,7 +142,8 @@ RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Pour une coloration, un balayage ou des mèches, demande toujours la longueur des cheveux (courts, mi-longs ou longs) AVANT d'appeler check_slots — le prix et la durée varient fortement.
 - Si le client demande un service que tu ne reconnais pas dans le catalogue ci-dessous, ne l'invente pas. Dis-lui que ce service n'est pas proposé et oriente-le vers les prestations proches du catalogue.
 - Quand un outil retourne un message d'erreur ou d'échec, reformule-le toujours de façon naturelle et empathique — ne répète jamais le message brut.
-- Après avoir exécuté avec succès create_booking, cancel_booking ou reschedule_booking, demande systématiquement "Y a-t-il autre chose que je puisse faire pour vous ?" avant de prendre congé. Ne raccroche jamais immédiatement après une action.
+- Après avoir exécuté avec succès create_booking : demande au client s'il souhaite recevoir une confirmation par SMS ("Souhaitez-vous recevoir un SMS de confirmation ?"). Si oui, appelle send_sms_confirmation avec le numéro du rendez-vous. Si non, passe directement à la suite. Puis demande "Y a-t-il autre chose que je puisse faire pour vous ?"
+- Après cancel_booking ou reschedule_booking, demande directement "Y a-t-il autre chose que je puisse faire pour vous ?" sans proposer de SMS. Ne raccroche jamais immédiatement après une action.
 - Ne dis JAMAIS qu'un créneau est indisponible à une heure précise sans avoir appelé check_slots avec time_from/time_to correspondants. Si le client demande "vers 16h", appelle check_slots avec time_from:"15:00" et time_to:"17:00" avant de conclure quoi que ce soit.
 - Pour changer de coiffeur sur un rendez-vous déjà confirmé : utilise cancel_booking sur le rendez-vous existant, puis create_booking avec le nouvel employé au même créneau. N'utilise JAMAIS reschedule_booking pour changer d'employé — cet outil ne modifie que la date et l'heure.
 - Si le client dit quelque chose d'incompréhensible ou hors contexte, demande-lui poliment de préciser ("Je n'ai pas bien saisi, pourriez-vous reformuler ?") plutôt que de répondre que tu n'as pas compris.
@@ -309,6 +310,26 @@ TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_sms_confirmation",
+            "description": (
+                "Envoie un SMS de confirmation au client après create_booking. "
+                "N'appeler QUE si le client a explicitement accepté de recevoir un SMS."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "booking_id": {
+                        "type": "integer",
+                        "description": "Numéro du rendez-vous retourné par create_booking",
+                    },
+                },
+                "required": ["booking_id"],
+            },
+        },
+    },
 ]
 
 
@@ -457,17 +478,6 @@ async def _exec_create_booking(args: dict, db: AsyncSession) -> str:
     svc_label = svc.label if svc else service_id
     emp_name = f"{emp.prenom} {emp.nom}" if emp else employee_id
 
-    # Send SMS confirmation (fire-and-forget — never blocks the booking)
-    if client_phone:
-        await send_booking_confirmation(
-            client_phone=client_phone,
-            booking_id=booking.id,
-            svc_label=svc_label,
-            emp_name=emp_name,
-            date_str=date_str,
-            time_str=time_str,
-        )
-
     phone_info = f" — tél : {client_phone}" if client_phone else ""
     return (
         f"Rendez-vous #{booking.id} confirmé : {svc_label} "
@@ -552,6 +562,39 @@ async def _exec_reschedule_booking(args: dict, db: AsyncSession) -> str:
     )
 
 
+async def _exec_send_sms(args: dict, db: AsyncSession) -> str:
+    booking_id = args.get("booking_id")
+    if not booking_id:
+        return "Numéro de rendez-vous manquant pour l'envoi du SMS."
+
+    from sqlalchemy.orm import selectinload as _sil
+    result = await db.execute(
+        select(Booking)
+        .options(_sil(Booking.service), _sil(Booking.employee))
+        .where(Booking.id == int(booking_id))
+    )
+    booking = result.scalars().first()
+    if not booking:
+        return f"Rendez-vous #{booking_id} introuvable — SMS non envoyé."
+    if not booking.client_phone:
+        return "Aucun numéro de téléphone enregistré pour ce client — SMS non envoyé."
+
+    date_str = booking.start_time.strftime("%Y-%m-%d")
+    time_str = booking.start_time.strftime("%H:%M")
+    svc_label = booking.service.label if booking.service else ""
+    emp_name = f"{booking.employee.prenom} {booking.employee.nom}" if booking.employee else ""
+
+    sent = await send_booking_confirmation(
+        client_phone=booking.client_phone,
+        booking_id=booking.id,
+        svc_label=svc_label,
+        emp_name=emp_name,
+        date_str=date_str,
+        time_str=time_str,
+    )
+    return "SMS de confirmation envoyé." if sent else "Échec de l'envoi du SMS."
+
+
 async def _execute_tool(name: str, args: dict, db: AsyncSession) -> str:
     """Dispatch a tool call and return a plain-text result for the LLM."""
     try:
@@ -563,6 +606,8 @@ async def _execute_tool(name: str, args: dict, db: AsyncSession) -> str:
             return await _exec_cancel_booking(args, db)
         if name == "reschedule_booking":
             return await _exec_reschedule_booking(args, db)
+        if name == "send_sms_confirmation":
+            return await _exec_send_sms(args, db)
         if name == "get_salon_info":
             return get_info_response(args.get("topic"))
         return f"Outil inconnu : {name}"
