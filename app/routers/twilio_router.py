@@ -54,7 +54,7 @@ _cached_greeting_filename: str | None = None
 # ── Constants ────────────────────────────────────────────────
 
 _GREETING = (
-    "Bonjour et bienvenue chez Maison Éclat ! "
+    "Bonjour et bienvenue chez Maison Éclat, votre salon de coiffure ! "
     "Je peux vous aider à prendre rendez-vous, modifier ou annuler une réservation. "
     "Comment puis-je vous aider ?"
 )
@@ -233,7 +233,8 @@ async def twilio_voice(
 
     # Create session using CallSid as session_id (idempotent: check first)
     state = await db_load_session(db, call_sid)
-    if state is None:
+    is_new_session = state is None
+    if is_new_session:
         state = await db_create_session(
             db,
             client_name=caller_name or None,
@@ -247,11 +248,16 @@ async def twilio_voice(
     metrics.inc("telephony_calls_started")
     metrics.inc("sessions_started")
 
-    # Use pre-cached greeting if available, else generate on-the-fly
-    if _cached_greeting_filename:
-        audio_url: str | None = f"{_base_url(request)}/audio/{_cached_greeting_filename}"
+    # First call: play greeting. Silence timeout re-entry: use short re-prompt.
+    if is_new_session:
+        if _cached_greeting_filename:
+            audio_url: str | None = f"{_base_url(request)}/audio/{_cached_greeting_filename}"
+        else:
+            audio_url = await _tts(_GREETING, request, call_sid, 0)
+        prompt = _GREETING
     else:
-        audio_url = await _tts(_GREETING, request, call_sid, 0)
+        audio_url = await _tts(_SILENCE_PROMPT, request, call_sid, state.turns)
+        prompt = _SILENCE_PROMPT
 
     twiml = TwiML()
     gather = twiml.gather(
@@ -264,7 +270,7 @@ async def twilio_voice(
     if audio_url:
         gather.play(audio_url)
     else:
-        gather.say(_GREETING, voice=_VOICE, language=_LANG)
+        gather.say(prompt, voice=_VOICE, language=_LANG)
     twiml.redirect(_voice_url(request))
 
     return twiml.response()
@@ -438,6 +444,7 @@ async def twilio_gather(
         "human_transfer_offered",
         "session_ended",
         "booking_confirmed",
+        "create_booking",
     )
 
     twiml = TwiML()
