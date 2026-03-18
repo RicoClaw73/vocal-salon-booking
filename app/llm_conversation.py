@@ -592,7 +592,7 @@ async def _call_openai(
         "tools": TOOLS,
         "tool_choice": "auto",
         "temperature": 0.4,
-        "max_tokens": 350,
+        "max_tokens": 260,
     }
     headers = {
         "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
@@ -697,7 +697,7 @@ async def llm_turn(
             *working,
         ],
         "temperature": 0.4,
-        "max_tokens": 350,
+        "max_tokens": 260,
     }
     headers = {
         "Authorization": f"Bearer {settings.OPENAI_API_KEY}",

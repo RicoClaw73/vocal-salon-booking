@@ -75,7 +75,7 @@ def normalize_for_tts(text: str) -> str:
 
 _ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech"
 _DEFAULT_VOICE_ID = "lvQdCgwZfBuOzxyV5pxu"
-_DEFAULT_MODEL = "eleven_turbo_v2_5"           # Turbo : 2-3x plus rapide, qualité suffisante pour téléphonie
+_DEFAULT_MODEL = "eleven_flash_v2_5"
 
 
 async def synthesize_to_file(
