@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -115,9 +115,12 @@ RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Confirme explicitement service, date, heure, coiffeur et nom avant d'appeler create_booking.
 - Si le client mentionne un coiffeur préféré, passe l'employee_id dans check_slots.
 - Ne mentionne JAMAIS les identifiants techniques (service_id, employee_id) au client.
-- Quand tu cites un créneau, mentionne toujours le jour ET l'heure (ex: "mardi 18 mars à 9h").
+- Quand tu cites un créneau, mentionne toujours le jour ET l'heure (ex: "mardi 18 mars à 9 heures").
 - Pour les questions sur les produits, l'équipe ou les services, appelle get_salon_info plutôt que de répondre de mémoire.
 - Sois chaleureuse, naturelle et professionnelle. Tutoiement interdit, utilise "vous".
+- Si le client demande un créneau le matin, passe time_to:"12:00" à check_slots.
+- Si le client demande un créneau l'après-midi, passe time_from:"13:00" à check_slots.
+- check_slots scanne automatiquement jusqu'à 14 jours en avant si aucun créneau ne correspond à la contrainte horaire — tu n'as pas besoin de rappeler l'outil plusieurs fois pour ça.
 
 ÉQUIPE (employee_id → profil)
 {_employees_block()}
@@ -142,7 +145,9 @@ TOOLS: list[dict] = [
             "name": "check_slots",
             "description": (
                 "Vérifie les créneaux disponibles pour une prestation. "
-                "Appelle toujours cet outil avant de confirmer une disponibilité."
+                "Appelle toujours cet outil avant de confirmer une disponibilité. "
+                "Si aucun créneau ne correspond à la contrainte horaire à la date demandée, "
+                "l'outil scanne automatiquement les 14 jours suivants."
             ),
             "parameters": {
                 "type": "object",
@@ -153,13 +158,27 @@ TOOLS: list[dict] = [
                     },
                     "date": {
                         "type": "string",
-                        "description": "Date souhaitée au format YYYY-MM-DD",
+                        "description": "Date de départ souhaitée au format YYYY-MM-DD",
                     },
                     "employee_id": {
                         "type": "string",
                         "description": (
                             "ID de l'employé préféré si le client en a mentionné un. "
                             "emp_01=Sophie, emp_02=Karim, emp_03=Léa, emp_04=Hugo, emp_05=Amira"
+                        ),
+                    },
+                    "time_from": {
+                        "type": "string",
+                        "description": (
+                            "Heure minimale souhaitée au format HH:MM. "
+                            "Utilise '13:00' quand le client veut un créneau l'après-midi."
+                        ),
+                    },
+                    "time_to": {
+                        "type": "string",
+                        "description": (
+                            "Heure maximale souhaitée (exclue) au format HH:MM. "
+                            "Utilise '12:00' quand le client veut un créneau le matin."
                         ),
                     },
                 },
@@ -274,9 +293,11 @@ async def _exec_check_slots(args: dict, db: AsyncSession) -> str:
     service_id = args.get("service_id", "")
     date_str = args.get("date", "")
     employee_id = args.get("employee_id")
+    time_from: str | None = args.get("time_from")  # e.g. "13:00" for afternoon
+    time_to: str | None = args.get("time_to")      # e.g. "12:00" for morning only
 
     try:
-        target_date = date.fromisoformat(date_str)
+        start_date = date.fromisoformat(date_str)
     except (ValueError, TypeError):
         return f"Format de date invalide : '{date_str}'. Utilise YYYY-MM-DD."
 
@@ -291,38 +312,73 @@ async def _exec_check_slots(args: dict, db: AsyncSession) -> str:
             return f"Service '{service_id}' inconnu. Services proches : {suggestions}"
         return f"Service '{service_id}' introuvable dans le catalogue."
 
-    avail = await find_available_slots(
-        session=db,
-        service_id=service_id,
-        target_date=target_date,
-        preferred_employee_id=employee_id,
-    )
+    def _filter(slots: list) -> list:
+        """Keep only slots within the requested time window."""
+        if not time_from and not time_to:
+            return slots
+        out = []
+        for s in slots:
+            t = s["start"].split("T")[1][:5]  # "HH:MM"
+            if time_from and t < time_from:
+                continue
+            if time_to and t >= time_to:
+                continue
+            out.append(s)
+        return out
 
-    if not avail["slots"]:
-        alts = avail.get("alternatives", [])[:3]
-        if alts:
-            alt_text = " | ".join(
-                f"{a['start'][:10]} à {a['start'].split('T')[1][:5]} avec {a['employee']['prenom']}"
-                for a in alts
+    # With a time constraint, scan up to 14 days forward to find the first match.
+    # Without a constraint, only check the requested date (original behaviour).
+    scan_days = 14 if (time_from or time_to) else 1
+    last_avail: dict = {}
+
+    for offset in range(scan_days):
+        check_date = start_date + timedelta(days=offset)
+        avail = await find_available_slots(
+            session=db,
+            service_id=service_id,
+            target_date=check_date,
+            preferred_employee_id=employee_id,
+        )
+        last_avail = avail
+        filtered = _filter(avail["slots"])
+        if filtered:
+            top = filtered[:5]
+            date_label = check_date.isoformat()
+            slots_info = " | ".join(
+                f"{date_label} à {s['start'].split('T')[1][:5]} avec {s['employee']['prenom']}"
+                f" (id={s['employee']['id']})"
+                for s in top
+            )
+            skip_note = (
+                f" (aucun créneau correspondant le {date_str}, premier match :)"
+                if offset > 0 else ""
             )
             return (
-                f"Aucun créneau le {date_str} pour {svc.label}. "
-                f"Créneaux proches disponibles : {alt_text}"
+                f"{len(filtered)} créneau(x) disponible(s) le {date_label}{skip_note} pour "
+                f"{svc.label} ({svc.prix_eur}€, {svc.duree_min}min). "
+                f"Options : {slots_info}"
             )
-        return f"Aucun créneau disponible le {date_str} pour {svc.label}."
 
-    top = avail["slots"][:5]
-    slots_info = " | ".join(
-        f"{date_str} à {s['start'].split('T')[1][:5]} avec {s['employee']['prenom']}"
-        f" (id={s['employee']['id']})"
-        for s in top
-    )
-    total = len(avail["slots"])
-    return (
-        f"{total} créneau(x) disponible(s) le {date_str} pour "
-        f"{svc.label} ({svc.prix_eur}€, {svc.duree_min}min). "
-        f"Options : {slots_info}"
-    )
+    # Nothing found across all scanned days
+    if time_from or time_to:
+        window = f"après {time_from}" if time_from else f"avant {time_to}"
+        return (
+            f"Aucun créneau disponible {window} pour {svc.label} "
+            f"dans les {scan_days} prochains jours (à partir du {date_str})."
+        )
+
+    # No time filter, no slots on target date → return alternatives from slot engine
+    alts = last_avail.get("alternatives", [])[:3]
+    if alts:
+        alt_text = " | ".join(
+            f"{a['start'][:10]} à {a['start'].split('T')[1][:5]} avec {a['employee']['prenom']}"
+            for a in alts
+        )
+        return (
+            f"Aucun créneau le {date_str} pour {svc.label}. "
+            f"Créneaux proches disponibles : {alt_text}"
+        )
+    return f"Aucun créneau disponible le {date_str} pour {svc.label}."
 
 
 async def _exec_create_booking(args: dict, db: AsyncSession) -> str:
