@@ -42,24 +42,24 @@
     }
 
     .cal-day-col { position: relative; border-left: 1px solid #f1f5f9; }
-    .cal-day-col.today { background: #faf5ff; }
+    .cal-day-col.today { background: #f8f9ff; }
     .cal-day-cell { height: 60px; border-bottom: 1px solid #f8fafc; }
 
     /* ── Appointment cards ───────────────────── */
     .appt {
       position: absolute; left: 3px; right: 3px;
-      border-radius: 7px; padding: 5px 7px;
+      border-radius: 7px; padding: 5px 8px;
       overflow: hidden; cursor: pointer;
       transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
-      border-left-width: 3px; border-left-style: solid;
       font-size: 11.5px; line-height: 1.35;
-      min-height: 22px;
+      min-height: 26px; color: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,.18);
     }
     .appt:hover { transform: translateY(-1px) scale(1.01);
-                  box-shadow: 0 6px 20px rgba(0,0,0,.14); z-index: 10; filter: brightness(0.97); }
-    .appt-name    { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .appt-service { opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
-    .appt-meta    { opacity: .65; font-size: 10.5px; margin-top: 1px; }
+                  box-shadow: 0 5px 18px rgba(0,0,0,.28); z-index: 10; filter: brightness(1.08); }
+    .appt-name    { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .appt-service { opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+    .appt-meta    { opacity: .7; font-size: 10.5px; margin-top: 1px; }
 
     /* ── Current time line ───────────────────── */
     .now-line {
@@ -642,7 +642,7 @@ function buildCard(b, colIdx, numCols) {
 
   const card = document.createElement('div');
   card.className = 'appt';
-  card.style.cssText = `top:${startM*PX_PER_MIN}px;height:${h}px;left:${left};width:${w};background:${c.light};border-left-color:${c.bg};color:${c.text};`;
+  card.style.cssText = `top:${startM*PX_PER_MIN}px;height:${h}px;left:${left};width:${w};background:${c.bg};`;
   card.innerHTML = `<div class="appt-name">${firstName}</div>
     ${h > 36 ? `<div class="appt-service">${b.service_label || ''}</div>` : ''}
     ${h > 52 ? `<div class="appt-meta">${timeStr} · ${empFirst}</div>` : ''}`;
