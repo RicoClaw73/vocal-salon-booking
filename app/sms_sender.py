@@ -50,14 +50,18 @@ def _build_sms(
     date_str: str,
     time_str: str,
 ) -> str:
+    """Build SMS body. Must stay under 160 GSM-7 chars (no emoji — would force UCS-2/70 chars)."""
     date_fr = _format_date_fr(date_str, time_str)
-    return (
-        f"Maison Éclat — RDV #{booking_id} confirmé\n"
-        f"{svc_label} avec {emp_name}\n"
+    emp_first = emp_name.split()[0] if emp_name else emp_name
+    svc_short = svc_label[:28] + "…" if len(svc_label) > 28 else svc_label
+    body = (
+        f"Maison Eclat - RDV #{booking_id}\n"
+        f"{svc_short} avec {emp_first}\n"
         f"{date_fr}\n"
-        f"📍 42 rue des Petits-Champs, 75002 Paris\n"
-        f"Pour modifier ou annuler, rappelez-nous."
+        f"42 r. des Petits-Champs, Paris 2e\n"
+        f"Modif/annul: rappeler le salon."
     )
+    return body[:160]
 
 
 async def send_booking_confirmation(
