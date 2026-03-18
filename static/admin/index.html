@@ -8,18 +8,18 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --gold: #9a7b4f;
-      --gold-light: #c4a870;
-      --dark: #1a1a1a;
+      --gold: #c4973c;
+      --gold-light: #e8c97a;
+      --dark: #111111;
+      --dark2: #1e1e1e;
       --grey: #6b6b6b;
-      --grey-light: #f4f4f4;
-      --border: #e0e0e0;
-      --green: #2d7a4f;
-      --green-bg: #eaf4ee;
-      --red: #c0392b;
-      --red-bg: #fdf0ee;
-      --blue: #2563a8;
-      --blue-bg: #eef4fc;
+      --grey-light: #f0ece6;
+      --border: #e0d8cf;
+      --white: #ffffff;
+      --green: #2d7a4f; --green-bg: #eaf4ee;
+      --red: #c0392b;   --red-bg: #fdf0ee;
+      --px-per-min: 1.4;
+      --start-hour: 9;
     }
 
     body {
@@ -33,159 +33,362 @@
     header {
       background: var(--dark);
       color: white;
-      padding: 16px 20px;
+      padding: 0 24px;
+      height: 56px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       position: sticky;
       top: 0;
-      z-index: 10;
+      z-index: 100;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
     .logo {
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-size: 17px;
+      gap: 8px;
+      font-size: 16px;
       font-weight: 600;
-      letter-spacing: 0.03em;
+      letter-spacing: 0.04em;
     }
-    .logo-dot { color: var(--gold-light); font-size: 20px; }
-    .header-actions { display: flex; align-items: center; gap: 12px; }
-    .btn-refresh {
-      background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.2);
+    .logo-star { color: var(--gold-light); }
+    .header-center {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-week {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
       color: white;
-      padding: 7px 14px;
+      padding: 6px 12px;
       border-radius: 6px;
       cursor: pointer;
       font-size: 13px;
       transition: background 0.15s;
+      white-space: nowrap;
     }
-    .btn-refresh:hover { background: rgba(255,255,255,0.2); }
-    .btn-logout {
+    .btn-week:hover { background: rgba(255,255,255,0.16); }
+    .btn-today {
+      background: var(--gold);
+      border: none;
+      color: white;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 0.15s;
+    }
+    .btn-today:hover { background: #b0882e; }
+    .week-label {
+      color: rgba(255,255,255,0.6);
+      font-size: 13px;
+      min-width: 120px;
+      text-align: center;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .view-toggle {
+      display: flex;
+      background: rgba(255,255,255,0.08);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .view-btn {
       background: none;
       border: none;
       color: rgba(255,255,255,0.5);
+      padding: 6px 12px;
       cursor: pointer;
-      font-size: 13px;
-      padding: 7px 0;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s;
     }
-    .btn-logout:hover { color: white; }
+    .view-btn.active { background: rgba(255,255,255,0.15); color: white; }
+    .btn-logout {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.35);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 6px 8px;
+    }
+    .btn-logout:hover { color: rgba(255,255,255,0.7); }
 
-    /* ── Subtitle bar ── */
-    .subtitle-bar {
-      background: white;
+    /* ── Subbar ── */
+    .subbar {
+      background: var(--white);
       border-bottom: 1px solid var(--border);
-      padding: 10px 20px;
+      padding: 8px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      font-size: 13px;
-      color: var(--grey);
-    }
-    .countdown { color: var(--gold); font-weight: 500; }
-
-    /* ── Main ── */
-    main { padding: 20px; max-width: 1100px; margin: 0 auto; }
-
-    /* ── Empty / loading states ── */
-    .state-msg {
-      text-align: center;
-      padding: 60px 20px;
-      color: var(--grey);
-      font-size: 15px;
-    }
-    .state-msg .icon { font-size: 36px; margin-bottom: 12px; }
-
-    /* ── Status badge ── */
-    .badge {
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 20px;
       font-size: 12px;
+      color: var(--grey);
+    }
+    .subbar-count { font-weight: 600; color: var(--dark); }
+    .subbar-refresh { color: var(--gold); font-weight: 500; }
+
+    /* ── Calendar view ── */
+    #cal-view { padding: 0; }
+
+    .cal-wrapper {
+      background: var(--white);
+      border-top: none;
+    }
+
+    /* Day headers */
+    .cal-days-header {
+      display: grid;
+      grid-template-columns: 52px repeat(5, 1fr);
+      border-bottom: 2px solid var(--border);
+      background: var(--white);
+      position: sticky;
+      top: 56px;
+      z-index: 50;
+    }
+    .cal-day-header {
+      padding: 12px 8px;
+      text-align: center;
+      border-left: 1px solid var(--border);
+    }
+    .cal-day-header:first-child { border-left: none; }
+    .cal-day-name {
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      white-space: nowrap;
+      letter-spacing: 0.06em;
+      color: var(--grey);
     }
-    .badge-confirmed { background: var(--green-bg); color: var(--green); }
-    .badge-completed { background: var(--blue-bg); color: var(--blue); }
-    .badge-no_show   { background: #fef9e7; color: #b7950b; }
+    .cal-day-num {
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--dark);
+      line-height: 1.2;
+      margin-top: 2px;
+    }
+    .cal-day-header.today .cal-day-num {
+      background: var(--gold);
+      color: white;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 2px auto 0;
+      font-weight: 600;
+      font-size: 16px;
+    }
+    .cal-day-header.closed { opacity: 0.35; }
 
-    /* ── Desktop table ── */
-    .table-wrap {
-      background: white;
-      border-radius: 10px;
-      overflow: hidden;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    /* Time grid */
+    .cal-grid-wrap {
+      display: grid;
+      grid-template-columns: 52px repeat(5, 1fr);
+      overflow-y: auto;
+      max-height: calc(100vh - 160px);
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
+
+    /* Time labels */
+    .cal-times {
+      padding-top: 0;
     }
-    thead th {
-      background: var(--dark);
-      color: rgba(255,255,255,0.7);
-      text-align: left;
-      padding: 11px 16px;
+    .cal-time-slot {
+      height: calc(60px * var(--px-per-min) * 1);
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding: 0 8px 0 0;
+      color: var(--grey);
+      font-size: 11px;
       font-weight: 500;
-      font-size: 12px;
+      transform: translateY(-6px);
+    }
+
+    /* Day columns */
+    .cal-day-col {
+      border-left: 1px solid var(--border);
+      position: relative;
+      min-height: calc(60 * 11 * var(--px-per-min) * 1px);
+    }
+    .cal-day-col.closed { background: repeating-linear-gradient(
+      45deg, transparent, transparent 8px,
+      rgba(0,0,0,0.015) 8px, rgba(0,0,0,0.015) 16px
+    ); }
+
+    /* Hour lines */
+    .cal-hour-line {
+      position: absolute;
+      left: 0; right: 0;
+      border-top: 1px solid var(--border);
+      pointer-events: none;
+    }
+    .cal-hour-line.half {
+      border-top: 1px dashed rgba(0,0,0,0.06);
+    }
+
+    /* Appointment blocks */
+    .appt-block {
+      position: absolute;
+      left: 3px;
+      border-radius: 6px;
+      padding: 4px 7px;
+      cursor: pointer;
+      overflow: hidden;
+      transition: filter 0.15s, transform 0.1s;
+      border-left: 3px solid;
+      font-size: 11px;
+      line-height: 1.3;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .appt-block:hover { filter: brightness(0.95); transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+    .appt-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .appt-service { opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .appt-time-label { opacity: 0.6; font-size: 10px; }
+
+    /* Employee colors */
+    .emp-sophie  { background: #f0ecfb; border-color: #8b7cc8; color: #4a3d7a; }
+    .emp-karim   { background: #e8f5f3; border-color: #3a9b8e; color: #1e5c53; }
+    .emp-lea     { background: #fdf0ee; border-color: #e06b5a; color: #8b2d20; }
+    .emp-hugo    { background: #eef2fc; border-color: #4a7ed4; color: #1e3d7a; }
+    .emp-amira   { background: #eef7ee; border-color: #4da860; color: #1e5c28; }
+    .emp-default { background: #fdf7ee; border-color: var(--gold); color: #6b4a10; }
+
+    /* ── List view ── */
+    #list-view { display: none; padding: 20px 24px; }
+
+    .list-table-wrap {
+      background: var(--white);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      background: var(--dark2);
+      color: rgba(255,255,255,0.6);
+      text-align: left;
+      padding: 10px 14px;
+      font-weight: 500;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
-    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr { border-bottom: 1px solid var(--border); }
     tbody tr:last-child { border-bottom: none; }
-    tbody tr:hover { background: #fafafa; }
-    td { padding: 13px 16px; vertical-align: middle; }
-    .td-date { white-space: nowrap; }
-    .date-day { font-weight: 700; font-size: 15px; }
-    .date-time { color: var(--gold); font-weight: 600; font-size: 14px; }
-    .td-phone { color: var(--grey); font-size: 13px; }
-    .td-duration { color: var(--grey); font-size: 13px; }
+    tbody tr:hover { background: #faf8f5; }
+    td { padding: 12px 14px; vertical-align: middle; }
+    .td-date .date-day { font-weight: 700; font-size: 14px; }
+    .td-date .date-time { color: var(--gold); font-weight: 600; }
+    .emp-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      flex-shrink: 0;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .badge-confirmed { background: var(--green-bg); color: var(--green); }
+    .badge-completed { background: #eef2fc; color: #2d4d9b; }
+
     .btn-cancel {
       background: none;
       border: 1px solid var(--border);
       color: var(--red);
-      padding: 5px 12px;
+      padding: 4px 10px;
       border-radius: 5px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 11px;
       transition: all 0.15s;
-      white-space: nowrap;
     }
     .btn-cancel:hover { background: var(--red-bg); border-color: var(--red); }
 
-    /* ── Mobile cards ── */
-    .cards { display: none; flex-direction: column; gap: 10px; }
-    .card {
+    /* ── Detail modal ── */
+    .modal-bg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 200;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
       background: white;
-      border-radius: 10px;
-      padding: 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      border-radius: 16px 16px 0 0;
+      padding: 24px;
+      width: 100%;
+      max-width: 480px;
+      animation: slideUp 0.2s ease;
     }
-    .card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } }
+    .modal-handle {
+      width: 36px; height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      margin: 0 auto 20px;
     }
-    .card-datetime { display: flex; flex-direction: column; gap: 2px; }
-    .card-day { font-weight: 700; font-size: 15px; text-transform: uppercase; }
-    .card-time { color: var(--gold); font-weight: 600; font-size: 16px; }
-    .card-body { font-size: 14px; display: flex; flex-direction: column; gap: 5px; }
-    .card-client { font-weight: 600; font-size: 15px; }
-    .card-service { color: var(--grey); }
-    .card-phone { color: var(--grey); font-size: 13px; }
-    .card-footer {
-      margin-top: 12px;
+    .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+    .modal-row {
       display: flex;
-      justify-content: flex-end;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .modal-row:last-of-type { border-bottom: none; }
+    .modal-label { color: var(--grey); min-width: 90px; }
+    .modal-value { font-weight: 500; }
+    .modal-actions { margin-top: 20px; display: flex; gap: 10px; }
+    .btn-modal-cancel {
+      flex: 1;
+      padding: 12px;
+      background: var(--red-bg);
+      color: var(--red);
+      border: 1px solid #f0c0bb;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.15s;
+    }
+    .btn-modal-cancel:hover { background: #fae0dc; }
+    .btn-modal-close {
+      flex: 1;
+      padding: 12px;
+      background: var(--dark);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
     }
 
-    /* ── Login screen ── */
+    /* ── Empty/Login ── */
+    .state-msg {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--grey);
+    }
+    .state-msg .icon { font-size: 40px; margin-bottom: 12px; }
+
     #login-screen {
-      display: flex;
+      display: none;
       align-items: center;
       justify-content: center;
       min-height: 100vh;
@@ -193,335 +396,456 @@
     }
     .login-box {
       background: white;
-      border-radius: 14px;
-      padding: 40px 36px;
+      border-radius: 16px;
+      padding: 44px 40px;
       width: 100%;
-      max-width: 380px;
+      max-width: 360px;
       text-align: center;
     }
-    .login-logo {
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: 0.03em;
-      margin-bottom: 6px;
-    }
-    .login-sub {
-      color: var(--grey);
-      font-size: 14px;
-      margin-bottom: 32px;
-    }
+    .login-logo { font-size: 24px; font-weight: 700; letter-spacing: 0.03em; margin-bottom: 4px; }
+    .login-logo span { color: var(--gold); }
+    .login-sub { color: var(--grey); font-size: 14px; margin-bottom: 32px; }
     .login-input {
-      width: 100%;
-      padding: 12px 14px;
+      width: 100%; padding: 12px 14px;
       border: 1.5px solid var(--border);
-      border-radius: 8px;
-      font-size: 15px;
-      outline: none;
+      border-radius: 8px; font-size: 15px;
+      outline: none; margin-bottom: 10px;
       transition: border-color 0.15s;
-      margin-bottom: 12px;
     }
     .login-input:focus { border-color: var(--gold); }
     .login-btn {
-      width: 100%;
-      padding: 12px;
-      background: var(--dark);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 15px;
-      font-weight: 600;
+      width: 100%; padding: 13px;
+      background: var(--dark); color: white;
+      border: none; border-radius: 8px;
+      font-size: 15px; font-weight: 600;
       cursor: pointer;
-      transition: background 0.15s;
     }
     .login-btn:hover { background: #333; }
-    .login-error {
-      color: var(--red);
-      font-size: 13px;
-      margin-top: 10px;
-      display: none;
+    .login-error { color: var(--red); font-size: 13px; margin-top: 10px; display: none; }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 10px 24px;
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
     }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
 
     /* ── Responsive ── */
     @media (max-width: 700px) {
-      .table-wrap { display: none; }
-      .cards { display: flex; }
-      main { padding: 12px; }
+      #cal-view { display: none !important; }
+      #list-view { display: block !important; padding: 12px; }
+      .header-center { display: none; }
+      .view-toggle { display: none; }
+      .cal-days-header { display: none; }
     }
   </style>
 </head>
 <body>
 
-<!-- Login screen -->
-<div id="login-screen" style="display:none">
+<!-- Login -->
+<div id="login-screen">
   <div class="login-box">
-    <div class="login-logo">✦ Maison Éclat</div>
+    <div class="login-logo"><span>✦</span> Maison Éclat</div>
     <div class="login-sub">Accès réservé au gérant</div>
-    <input
-      class="login-input"
-      id="token-input"
-      type="password"
-      placeholder="Code d'accès"
-      autocomplete="current-password"
-    >
+    <input class="login-input" id="token-input" type="password" placeholder="Code d'accès" autocomplete="current-password">
     <button class="login-btn" onclick="doLogin()">Accéder</button>
-    <div class="login-error" id="login-error">Code incorrect. Veuillez réessayer.</div>
+    <div class="login-error" id="login-error">Code incorrect.</div>
   </div>
 </div>
 
 <!-- Dashboard -->
 <div id="dashboard" style="display:none">
+
   <header>
-    <div class="logo">
-      <span class="logo-dot">✦</span>
-      Maison Éclat
+    <div class="logo"><span class="logo-star">✦</span> Maison Éclat</div>
+    <div class="header-center">
+      <button class="btn-week" onclick="moveWeek(-1)">&#8249;</button>
+      <button class="btn-today" onclick="goToday()">Aujourd'hui</button>
+      <span class="week-label" id="week-label"></span>
+      <button class="btn-week" onclick="moveWeek(1)">&#8250;</button>
     </div>
-    <div class="header-actions">
-      <button class="btn-refresh" onclick="loadBookings()">↻ Rafraîchir</button>
-      <button class="btn-logout" onclick="logout()">Déconnexion</button>
+    <div class="header-right">
+      <div class="view-toggle">
+        <button class="view-btn active" id="btn-cal" onclick="setView('cal')">Calendrier</button>
+        <button class="view-btn" id="btn-list" onclick="setView('list')">Liste</button>
+      </div>
+      <button class="btn-logout" onclick="logout()">✕</button>
     </div>
   </header>
 
-  <div class="subtitle-bar">
-    <span id="booking-count">Chargement…</span>
-    <span class="countdown" id="countdown"></span>
+  <div class="subbar">
+    <span><span class="subbar-count" id="booking-count">—</span> rendez-vous à venir</span>
+    <span class="subbar-refresh" id="countdown"></span>
   </div>
 
-  <main>
-    <div id="loading" class="state-msg">
-      <div class="icon">⏳</div>
-      Chargement des réservations…
-    </div>
+  <!-- Employee legend -->
+  <div class="legend" id="legend"></div>
 
-    <div id="empty" class="state-msg" style="display:none">
-      <div class="icon">📅</div>
-      Aucun rendez-vous à venir.
+  <!-- Calendar view -->
+  <div id="cal-view">
+    <div class="cal-wrapper">
+      <div class="cal-days-header" id="cal-days-header"></div>
+      <div class="cal-grid-wrap" id="cal-grid-wrap"></div>
     </div>
+  </div>
 
-    <!-- Desktop table -->
-    <div class="table-wrap" id="table-wrap" style="display:none">
+  <!-- List view -->
+  <div id="list-view">
+    <div class="list-table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Client</th>
-            <th>Téléphone</th>
-            <th>Prestation</th>
-            <th>Durée</th>
-            <th>Coiffeur</th>
-            <th>Statut</th>
-            <th></th>
+            <th>Date</th><th>Client</th><th>Téléphone</th>
+            <th>Prestation</th><th>Durée</th><th>Coiffeur</th><th>Statut</th><th></th>
           </tr>
         </thead>
-        <tbody id="table-body"></tbody>
+        <tbody id="list-body"></tbody>
       </table>
+      <div id="list-empty" class="state-msg" style="display:none">
+        <div class="icon">📅</div>Aucun rendez-vous.
+      </div>
     </div>
+  </div>
 
-    <!-- Mobile cards -->
-    <div class="cards" id="cards"></div>
-  </main>
+</div>
+
+<!-- Detail modal -->
+<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-title"></div>
+    <div id="modal-rows"></div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" id="modal-cancel-btn" onclick="cancelFromModal()">Annuler le RDV</button>
+      <button class="btn-modal-close" onclick="closeModal()">Fermer</button>
+    </div>
+  </div>
 </div>
 
 <script>
+  // ── Config ───────────────────────────────────────────────────
   const API = '/api/v1';
-  let refreshTimer = null;
+  const START_HOUR = 9;
+  const END_HOUR = 20;
+  const PX_PER_MIN = 1.4;
+  const CLOSED_DAYS = [0, 1]; // Sun, Mon
+
+  const EMP_COLORS = {
+    'sophie': 'emp-sophie', 'karim': 'emp-karim',
+    'léa': 'emp-lea', 'lea': 'emp-lea',
+    'hugo': 'emp-hugo', 'amira': 'emp-amira',
+  };
+  const EMP_DOT_COLORS = {
+    'sophie': '#8b7cc8', 'karim': '#3a9b8e',
+    'léa': '#e06b5a', 'lea': '#e06b5a',
+    'hugo': '#4a7ed4', 'amira': '#4da860',
+  };
+
+  // ── State ────────────────────────────────────────────────────
+  let allBookings = [];
+  let currentWeekStart = getWeekStart(new Date());
+  let countdownSec = 60;
   let countdownTimer = null;
-  let secondsLeft = 60;
+  let activeModal = null;
 
-  // ── Auth ────────────────────────────────────────────────────
+  // ── Auth ─────────────────────────────────────────────────────
+  const getToken = () => localStorage.getItem('admin_token') || '';
+  const saveToken = t => t ? localStorage.setItem('admin_token', t) : null;
+  const clearToken = () => localStorage.removeItem('admin_token');
 
-  function getToken() { return localStorage.getItem('admin_token') || ''; }
-  function saveToken(t) { localStorage.setItem('admin_token', t); }
-  function clearToken() { localStorage.removeItem('admin_token'); }
-
-  function logout() {
-    clearToken();
-    show('login-screen');
-    hide('dashboard');
-  }
+  function logout() { clearToken(); location.reload(); }
 
   async function doLogin() {
-    const input = document.getElementById('token-input');
-    const token = input.value.trim();
-    if (token) saveToken(token);
+    const t = document.getElementById('token-input').value.trim();
+    if (t) saveToken(t);
     const ok = await loadBookings();
-    if (!ok) {
-      clearToken();
-      document.getElementById('login-error').style.display = 'block';
-    }
+    if (!ok) { clearToken(); document.getElementById('login-error').style.display = 'block'; }
   }
+  document.getElementById('token-input').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
-  document.getElementById('token-input')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') doLogin();
-  });
-
-  // ── Fetch bookings ──────────────────────────────────────────
-
+  // ── Data ─────────────────────────────────────────────────────
   async function loadBookings() {
-    const token = getToken();
-    let url = `${API}/admin/bookings?days=30`;
-    if (token) url += `&token=${encodeURIComponent(token)}`;
-
+    let url = `${API}/admin/bookings?days=60`;
+    const t = getToken();
+    if (t) url += `&token=${encodeURIComponent(t)}`;
     try {
-      const resp = await fetch(url);
-      if (resp.status === 401) return false;
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const bookings = await resp.json();
-      render(bookings);
-      show('dashboard');
-      hide('login-screen');
+      const r = await fetch(url);
+      if (r.status === 401) return false;
+      if (!r.ok) throw new Error();
+      allBookings = await r.json();
+      render();
+      show('dashboard'); hide('login-screen');
       resetCountdown();
       return true;
-    } catch (e) {
-      console.error(e);
-      return false;
+    } catch { return false; }
+  }
+
+  // ── Render ───────────────────────────────────────────────────
+  function render() {
+    const count = allBookings.length;
+    document.getElementById('booking-count').textContent = count === 1 ? '1' : count;
+    renderLegend();
+    renderCalendar();
+    renderList();
+  }
+
+  function renderLegend() {
+    const employees = [...new Set(allBookings.map(b => b.employee_name))].sort();
+    const lg = document.getElementById('legend');
+    lg.innerHTML = employees.map(name => {
+      const key = name.split(' ')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const color = EMP_DOT_COLORS[key] || EMP_DOT_COLORS[name.toLowerCase()] || '#b8966a';
+      return `<div class="legend-item"><span class="emp-dot" style="background:${color}"></span>${esc(name)}</div>`;
+    }).join('');
+  }
+
+  // ── Calendar ─────────────────────────────────────────────────
+  function getWeekStart(d) {
+    const date = new Date(d);
+    const day = date.getDay(); // 0=Sun
+    // Start on Tuesday (day 2): offset = (day - 2 + 7) % 7
+    const offset = (day - 2 + 7) % 7;
+    date.setDate(date.getDate() - offset);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  function moveWeek(dir) {
+    currentWeekStart.setDate(currentWeekStart.getDate() + dir * 7);
+    renderCalendar();
+  }
+
+  function goToday() {
+    currentWeekStart = getWeekStart(new Date());
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 5 days: Tue–Sat
+    const days = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(currentWeekStart);
+      d.setDate(d.getDate() + i);
+      days.push(d);
     }
+
+    // Week label
+    const months = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+    const first = days[0], last = days[4];
+    document.getElementById('week-label').textContent =
+      first.getMonth() === last.getMonth()
+        ? `${first.getDate()}–${last.getDate()} ${months[first.getMonth()]}`
+        : `${first.getDate()} ${months[first.getMonth()]} – ${last.getDate()} ${months[last.getMonth()]}`;
+
+    // Day headers
+    const dayNames = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+    const hdr = document.getElementById('cal-days-header');
+    hdr.innerHTML = '<div></div>' + days.map(d => {
+      const isToday = d.getTime() === today.getTime();
+      const closed = CLOSED_DAYS.includes(d.getDay());
+      return `<div class="cal-day-header${isToday ? ' today' : ''}${closed ? ' closed' : ''}">
+        <div class="cal-day-name">${dayNames[d.getDay()]}</div>
+        <div class="cal-day-num">${d.getDate()}</div>
+      </div>`;
+    }).join('');
+
+    // Grid
+    const wrap = document.getElementById('cal-grid-wrap');
+    const totalMins = (END_HOUR - START_HOUR) * 60;
+    const totalPx = totalMins * PX_PER_MIN;
+
+    // Time column
+    let timesHtml = '<div class="cal-times">';
+    for (let h = START_HOUR; h <= END_HOUR; h++) {
+      timesHtml += `<div class="cal-time-slot">${h}h</div>`;
+    }
+    timesHtml += '</div>';
+
+    // Hour lines + appointment columns
+    let linesHtml = '';
+    for (let h = 0; h < (END_HOUR - START_HOUR); h++) {
+      const top = h * 60 * PX_PER_MIN;
+      linesHtml += `<div class="cal-hour-line" style="top:${top}px"></div>`;
+      linesHtml += `<div class="cal-hour-line half" style="top:${top + 30 * PX_PER_MIN}px"></div>`;
+    }
+
+    let gridHtml = timesHtml;
+    days.forEach(d => {
+      const closed = CLOSED_DAYS.includes(d.getDay());
+      const dayStr = d.toISOString().slice(0, 10);
+      const dayAppts = allBookings.filter(b => b.start_time.slice(0, 10) === dayStr);
+
+      // Compute overlapping columns
+      const assigned = assignColumns(dayAppts);
+
+      let apptHtml = assigned.map(({ b, col, totalCols }) => {
+        const start = new Date(b.start_time);
+        const end = new Date(b.end_time);
+        const topPx = ((start.getHours() - START_HOUR) * 60 + start.getMinutes()) * PX_PER_MIN;
+        const heightPx = Math.max(((end - start) / 60000) * PX_PER_MIN, 20);
+        const widthPct = totalCols > 1 ? (95 / totalCols) : 95;
+        const leftPct = col * (95 / totalCols) + 2;
+        const empKey = b.employee_name.split(' ')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const cls = EMP_COLORS[empKey] || 'emp-default';
+
+        return `<div class="appt-block ${cls}"
+          style="top:${topPx}px;height:${heightPx}px;width:${widthPct}%;left:${leftPct}%"
+          onclick='openModal(${JSON.stringify(b)})'>
+          <div class="appt-name">${esc(b.client_name)}</div>
+          ${heightPx > 30 ? `<div class="appt-service">${esc(b.service_label)}</div>` : ''}
+          ${heightPx > 45 ? `<div class="appt-time-label">${fmtTime(b.start_time)} · ${b.employee_name.split(' ')[0]}</div>` : ''}
+        </div>`;
+      }).join('');
+
+      gridHtml += `<div class="cal-day-col${closed ? ' closed' : ''}" style="min-height:${totalPx}px">
+        ${linesHtml}${apptHtml}
+      </div>`;
+    });
+
+    wrap.innerHTML = gridHtml;
   }
 
-  // ── Render ──────────────────────────────────────────────────
-
-  function fmtDate(iso) {
-    const d = new Date(iso);
-    const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-    const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin',
-                    'juil', 'août', 'sep', 'oct', 'nov', 'déc'];
-    return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
+  function assignColumns(appts) {
+    if (!appts.length) return [];
+    const sorted = [...appts].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+    const cols = [];
+    const result = sorted.map(b => {
+      let c = 0;
+      while (cols[c] && new Date(cols[c]) > new Date(b.start_time)) c++;
+      cols[c] = b.end_time;
+      return { b, col: c };
+    });
+    const maxCol = Math.max(...result.map(r => r.col)) + 1;
+    return result.map(r => ({ ...r, totalCols: maxCol }));
   }
 
-  function fmtTime(iso) {
-    const d = new Date(iso);
-    const h = d.getHours();
-    const m = d.getMinutes().toString().padStart(2, '0');
-    return m === '00' ? `${h}h` : `${h}h${m}`;
-  }
-
-  function fmtDuration(start, end) {
-    const mins = Math.round((new Date(end) - new Date(start)) / 60000);
-    if (mins < 60) return `${mins} min`;
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return m ? `${h}h${m.toString().padStart(2, '0')}` : `${h}h`;
-  }
-
-  function badgeHtml(status) {
-    const labels = { confirmed: 'confirmé', completed: 'terminé', no_show: 'absent' };
-    const cls = { confirmed: 'badge-confirmed', completed: 'badge-completed', no_show: 'badge-no_show' };
-    return `<span class="badge ${cls[status] || ''}">${labels[status] || status}</span>`;
-  }
-
-  function render(bookings) {
-    const count = bookings.length;
-    document.getElementById('booking-count').textContent =
-      count === 0 ? 'Aucun rendez-vous à venir'
-      : count === 1 ? '1 rendez-vous à venir'
-      : `${count} rendez-vous à venir`;
-
-    hide('loading');
-
-    if (count === 0) {
-      hide('table-wrap'); hide('cards');
-      show('empty');
+  // ── List ─────────────────────────────────────────────────────
+  function renderList() {
+    const tbody = document.getElementById('list-body');
+    const empty = document.getElementById('list-empty');
+    if (!allBookings.length) {
+      tbody.innerHTML = '';
+      empty.style.display = 'block';
       return;
     }
-
-    hide('empty');
-    show('table-wrap');
-
-    // Desktop table
-    const tbody = document.getElementById('table-body');
-    tbody.innerHTML = bookings.map(b => `
-      <tr id="row-${b.id}">
+    empty.style.display = 'none';
+    tbody.innerHTML = allBookings.map(b => {
+      const empKey = b.employee_name.split(' ')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const dot = EMP_DOT_COLORS[empKey] || '#b8966a';
+      return `<tr id="row-${b.id}">
         <td class="td-date">
           <div class="date-day">${fmtDate(b.start_time)}</div>
           <div class="date-time">${fmtTime(b.start_time)}</div>
         </td>
         <td><strong>${esc(b.client_name)}</strong></td>
-        <td class="td-phone">${b.client_phone ? esc(b.client_phone) : '—'}</td>
+        <td style="color:var(--grey)">${b.client_phone ? esc(b.client_phone) : '—'}</td>
         <td>${esc(b.service_label)}</td>
-        <td class="td-duration">${fmtDuration(b.start_time, b.end_time)}</td>
-        <td>${esc(b.employee_name)}</td>
-        <td>${badgeHtml(b.status)}</td>
-        <td>
-          <button class="btn-cancel" onclick="cancelBooking(${b.id})">Annuler</button>
-        </td>
-      </tr>
-    `).join('');
-
-    // Mobile cards
-    const cards = document.getElementById('cards');
-    cards.innerHTML = bookings.map(b => `
-      <div class="card" id="card-${b.id}">
-        <div class="card-header">
-          <div class="card-datetime">
-            <div class="card-day">${fmtDate(b.start_time)}</div>
-            <div class="card-time">${fmtTime(b.start_time)}</div>
-          </div>
-          ${badgeHtml(b.status)}
-        </div>
-        <div class="card-body">
-          <div class="card-client">${esc(b.client_name)}</div>
-          <div class="card-service">${esc(b.service_label)} · ${esc(b.employee_name)} · ${fmtDuration(b.start_time, b.end_time)}</div>
-          ${b.client_phone ? `<div class="card-phone">${esc(b.client_phone)}</div>` : ''}
-        </div>
-        <div class="card-footer">
-          <button class="btn-cancel" onclick="cancelBooking(${b.id})">Annuler</button>
-        </div>
-      </div>
-    `).join('');
+        <td style="color:var(--grey)">${fmtDur(b.start_time, b.end_time)}</td>
+        <td><span class="emp-dot" style="background:${dot}"></span>${esc(b.employee_name)}</td>
+        <td><span class="badge badge-${b.status}">${b.status === 'confirmed' ? 'Confirmé' : b.status}</span></td>
+        <td><button class="btn-cancel" onclick="cancelBooking(${b.id})">Annuler</button></td>
+      </tr>`;
+    }).join('');
   }
 
-  // ── Cancel ──────────────────────────────────────────────────
+  // ── Modal ────────────────────────────────────────────────────
+  function openModal(b) {
+    activeModal = b;
+    document.getElementById('modal-title').textContent = b.client_name;
+    document.getElementById('modal-rows').innerHTML = [
+      ['Date', `${fmtDate(b.start_time)} à ${fmtTime(b.start_time)}`],
+      ['Prestation', b.service_label],
+      ['Durée', fmtDur(b.start_time, b.end_time)],
+      ['Coiffeur', b.employee_name],
+      ['Téléphone', b.client_phone || '—'],
+      ['Statut', b.status === 'confirmed' ? 'Confirmé' : b.status],
+    ].map(([l, v]) => `<div class="modal-row"><span class="modal-label">${l}</span><span class="modal-value">${esc(String(v))}</span></div>`).join('');
+    document.getElementById('modal-bg').classList.add('open');
+  }
 
-  async function cancelBooking(id) {
-    if (!confirm('Annuler ce rendez-vous ?')) return;
-    try {
-      const resp = await fetch(`${API}/bookings/${id}`, { method: 'DELETE' });
-      if (!resp.ok) throw new Error();
-      // Remove row/card from UI
-      document.getElementById(`row-${id}`)?.remove();
-      document.getElementById(`card-${id}`)?.remove();
-      // Update count
-      const rows = document.querySelectorAll('#table-body tr').length;
-      document.getElementById('booking-count').textContent =
-        rows === 0 ? 'Aucun rendez-vous à venir'
-        : rows === 1 ? '1 rendez-vous à venir'
-        : `${rows} rendez-vous à venir`;
-    } catch {
-      alert('Erreur lors de l\'annulation. Veuillez réessayer.');
+  function closeModal(e) {
+    if (!e || e.target === document.getElementById('modal-bg')) {
+      document.getElementById('modal-bg').classList.remove('open');
     }
   }
 
-  // ── Countdown ───────────────────────────────────────────────
+  async function cancelFromModal() {
+    if (!activeModal) return;
+    if (!confirm(`Annuler le RDV de ${activeModal.client_name} ?`)) return;
+    await cancelBooking(activeModal.id);
+    closeModal();
+  }
 
+  // ── Cancel ───────────────────────────────────────────────────
+  async function cancelBooking(id) {
+    if (!confirm('Annuler ce rendez-vous ?')) return;
+    try {
+      const r = await fetch(`${API}/bookings/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error();
+      allBookings = allBookings.filter(b => b.id !== id);
+      render();
+    } catch { alert('Erreur lors de l\'annulation.'); }
+  }
+
+  // ── View toggle ──────────────────────────────────────────────
+  function setView(v) {
+    document.getElementById('cal-view').style.display = v === 'cal' ? 'block' : 'none';
+    document.getElementById('list-view').style.display = v === 'list' ? 'block' : 'none';
+    document.getElementById('btn-cal').classList.toggle('active', v === 'cal');
+    document.getElementById('btn-list').classList.toggle('active', v === 'list');
+  }
+
+  // ── Countdown ────────────────────────────────────────────────
   function resetCountdown() {
-    secondsLeft = 60;
+    countdownSec = 60;
     clearInterval(countdownTimer);
     countdownTimer = setInterval(() => {
-      secondsLeft--;
+      countdownSec--;
       document.getElementById('countdown').textContent =
-        secondsLeft > 0 ? `Actualisation dans ${secondsLeft}s` : '';
-      if (secondsLeft <= 0) {
-        clearInterval(countdownTimer);
-        loadBookings();
-      }
+        countdownSec > 0 ? `Actualisation dans ${countdownSec}s` : '';
+      if (countdownSec <= 0) { clearInterval(countdownTimer); loadBookings(); }
     }, 1000);
   }
 
-  // ── Utils ────────────────────────────────────────────────────
+  // ── Utils ─────────────────────────────────────────────────────
+  const MONTHS = ['jan','fév','mar','avr','mai','juin','juil','aoû','sep','oct','nov','déc'];
+  const DAYS   = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 
-  function show(id) { document.getElementById(id).style.display = id === 'cards' ? 'flex' : 'block'; }
-  function hide(id) { document.getElementById(id).style.display = 'none'; }
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  }
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    const m = d.getMinutes().toString().padStart(2,'0');
+    return m === '00' ? `${d.getHours()}h` : `${d.getHours()}h${m}`;
+  }
+  function fmtDur(s, e) {
+    const m = Math.round((new Date(e) - new Date(s)) / 60000);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60), r = m % 60;
+    return r ? `${h}h${r.toString().padStart(2,'0')}` : `${h}h`;
+  }
   function esc(s) {
     return String(s ?? '')
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+  function show(id) { document.getElementById(id).style.display = 'block'; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
 
-  // ── Init ─────────────────────────────────────────────────────
-
+  // ── Init ──────────────────────────────────────────────────────
   (async () => {
-    // Try loading directly (works when VOICE_API_KEY is not set)
     const ok = await loadBookings();
-    if (!ok) { clearToken(); show('login-screen'); }
+    if (!ok) { clearToken(); document.getElementById('login-screen').style.display = 'flex'; }
   })();
 </script>
 </body>
