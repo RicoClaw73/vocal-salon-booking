@@ -33,6 +33,7 @@ from app.config import settings
 from app.models import Booking, BookingStatus, Employee, EmployeeCompetency, Service
 from app.salon_info import get_info_response
 from app.slot_engine import find_available_slots, validate_booking_request
+from app.sms_sender import send_booking_confirmation
 
 logger = logging.getLogger(__name__)
 
@@ -450,6 +451,18 @@ async def _exec_create_booking(args: dict, db: AsyncSession) -> str:
 
     svc_label = svc.label if svc else service_id
     emp_name = f"{emp.prenom} {emp.nom}" if emp else employee_id
+
+    # Send SMS confirmation (fire-and-forget — never blocks the booking)
+    if client_phone:
+        await send_booking_confirmation(
+            client_phone=client_phone,
+            booking_id=booking.id,
+            svc_label=svc_label,
+            emp_name=emp_name,
+            date_str=date_str,
+            time_str=time_str,
+        )
+
     phone_info = f" — tél : {client_phone}" if client_phone else ""
     return (
         f"Rendez-vous #{booking.id} confirmé : {svc_label} "
