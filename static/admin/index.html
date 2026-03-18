@@ -342,8 +342,7 @@
   async function doLogin() {
     const input = document.getElementById('token-input');
     const token = input.value.trim();
-    if (!token) return;
-    saveToken(token);
+    if (token) saveToken(token);
     const ok = await loadBookings();
     if (!ok) {
       clearToken();
@@ -520,13 +519,9 @@
   // ── Init ─────────────────────────────────────────────────────
 
   (async () => {
-    const token = getToken();
-    if (token) {
-      const ok = await loadBookings();
-      if (!ok) { clearToken(); show('login-screen'); }
-    } else {
-      show('login-screen');
-    }
+    // Try loading directly (works when VOICE_API_KEY is not set)
+    const ok = await loadBookings();
+    if (!ok) { clearToken(); show('login-screen'); }
   })();
 </script>
 </body>
