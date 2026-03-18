@@ -24,7 +24,7 @@ from app.config import settings
 from app.database import async_session, engine
 from app.models import Base
 from app.observability import metrics
-from app.routers import availability, bookings, employees, ops, services, telephony, voice
+from app.routers import admin, availability, bookings, employees, ops, services, telephony, voice
 from app.routers import twilio_router
 from app.routers.twilio_router import warm_greeting_cache
 from app.seed import seed_all
@@ -83,6 +83,7 @@ app.include_router(services.router, prefix=API_PREFIX)
 app.include_router(employees.router, prefix=API_PREFIX)
 app.include_router(availability.router, prefix=API_PREFIX)
 app.include_router(bookings.router, prefix=API_PREFIX)
+app.include_router(admin.router, prefix=API_PREFIX)
 app.include_router(voice.router, prefix=API_PREFIX)
 app.include_router(ops.router, prefix=API_PREFIX)
 app.include_router(telephony.router, prefix=API_PREFIX)
@@ -92,6 +93,11 @@ app.include_router(twilio_router.router, prefix=API_PREFIX)
 _audio_dir = Path(settings.AUDIO_DIR)
 _audio_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/audio", StaticFiles(directory=str(_audio_dir)), name="audio")
+
+# Admin dashboard (single-page, token-protected)
+_admin_static = Path("static/admin")
+_admin_static.mkdir(parents=True, exist_ok=True)
+app.mount("/admin", StaticFiles(directory=str(_admin_static), html=True), name="admin_ui")
 
 
 # ── Health ──────────────────────────────────────────────────

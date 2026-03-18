@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maison Éclat — Réservations</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold: #9a7b4f;
+      --gold-light: #c4a870;
+      --dark: #1a1a1a;
+      --grey: #6b6b6b;
+      --grey-light: #f4f4f4;
+      --border: #e0e0e0;
+      --green: #2d7a4f;
+      --green-bg: #eaf4ee;
+      --red: #c0392b;
+      --red-bg: #fdf0ee;
+      --blue: #2563a8;
+      --blue-bg: #eef4fc;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--grey-light);
+      color: var(--dark);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--dark);
+      color: white;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+    .logo-dot { color: var(--gold-light); font-size: 20px; }
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+    .btn-refresh {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: white;
+      padding: 7px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.15s;
+    }
+    .btn-refresh:hover { background: rgba(255,255,255,0.2); }
+    .btn-logout {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.5);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 7px 0;
+    }
+    .btn-logout:hover { color: white; }
+
+    /* ── Subtitle bar ── */
+    .subtitle-bar {
+      background: white;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--grey);
+    }
+    .countdown { color: var(--gold); font-weight: 500; }
+
+    /* ── Main ── */
+    main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+
+    /* ── Empty / loading states ── */
+    .state-msg {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--grey);
+      font-size: 15px;
+    }
+    .state-msg .icon { font-size: 36px; margin-bottom: 12px; }
+
+    /* ── Status badge ── */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    .badge-confirmed { background: var(--green-bg); color: var(--green); }
+    .badge-completed { background: var(--blue-bg); color: var(--blue); }
+    .badge-no_show   { background: #fef9e7; color: #b7950b; }
+
+    /* ── Desktop table ── */
+    .table-wrap {
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    thead th {
+      background: var(--dark);
+      color: rgba(255,255,255,0.7);
+      text-align: left;
+      padding: 11px 16px;
+      font-weight: 500;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #fafafa; }
+    td { padding: 13px 16px; vertical-align: middle; }
+    .td-date { white-space: nowrap; }
+    .date-day { font-weight: 700; font-size: 15px; }
+    .date-time { color: var(--gold); font-weight: 600; font-size: 14px; }
+    .td-phone { color: var(--grey); font-size: 13px; }
+    .td-duration { color: var(--grey); font-size: 13px; }
+    .btn-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--red);
+      padding: 5px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-cancel:hover { background: var(--red-bg); border-color: var(--red); }
+
+    /* ── Mobile cards ── */
+    .cards { display: none; flex-direction: column; gap: 10px; }
+    .card {
+      background: white;
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .card-datetime { display: flex; flex-direction: column; gap: 2px; }
+    .card-day { font-weight: 700; font-size: 15px; text-transform: uppercase; }
+    .card-time { color: var(--gold); font-weight: 600; font-size: 16px; }
+    .card-body { font-size: 14px; display: flex; flex-direction: column; gap: 5px; }
+    .card-client { font-weight: 600; font-size: 15px; }
+    .card-service { color: var(--grey); }
+    .card-phone { color: var(--grey); font-size: 13px; }
+    .card-footer {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    /* ── Login screen ── */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: var(--dark);
+    }
+    .login-box {
+      background: white;
+      border-radius: 14px;
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 380px;
+      text-align: center;
+    }
+    .login-logo {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      margin-bottom: 6px;
+    }
+    .login-sub {
+      color: var(--grey);
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    .login-input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.15s;
+      margin-bottom: 12px;
+    }
+    .login-input:focus { border-color: var(--gold); }
+    .login-btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--dark);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .login-btn:hover { background: #333; }
+    .login-error {
+      color: var(--red);
+      font-size: 13px;
+      margin-top: 10px;
+      display: none;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 700px) {
+      .table-wrap { display: none; }
+      .cards { display: flex; }
+      main { padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Login screen -->
+<div id="login-screen" style="display:none">
+  <div class="login-box">
+    <div class="login-logo">✦ Maison Éclat</div>
+    <div class="login-sub">Accès réservé au gérant</div>
+    <input
+      class="login-input"
+      id="token-input"
+      type="password"
+      placeholder="Code d'accès"
+      autocomplete="current-password"
+    >
+    <button class="login-btn" onclick="doLogin()">Accéder</button>
+    <div class="login-error" id="login-error">Code incorrect. Veuillez réessayer.</div>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboard" style="display:none">
+  <header>
+    <div class="logo">
+      <span class="logo-dot">✦</span>
+      Maison Éclat
+    </div>
+    <div class="header-actions">
+      <button class="btn-refresh" onclick="loadBookings()">↻ Rafraîchir</button>
+      <button class="btn-logout" onclick="logout()">Déconnexion</button>
+    </div>
+  </header>
+
+  <div class="subtitle-bar">
+    <span id="booking-count">Chargement…</span>
+    <span class="countdown" id="countdown"></span>
+  </div>
+
+  <main>
+    <div id="loading" class="state-msg">
+      <div class="icon">⏳</div>
+      Chargement des réservations…
+    </div>
+
+    <div id="empty" class="state-msg" style="display:none">
+      <div class="icon">📅</div>
+      Aucun rendez-vous à venir.
+    </div>
+
+    <!-- Desktop table -->
+    <div class="table-wrap" id="table-wrap" style="display:none">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Client</th>
+            <th>Téléphone</th>
+            <th>Prestation</th>
+            <th>Durée</th>
+            <th>Coiffeur</th>
+            <th>Statut</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Mobile cards -->
+    <div class="cards" id="cards"></div>
+  </main>
+</div>
+
+<script>
+  const API = '/api/v1';
+  let refreshTimer = null;
+  let countdownTimer = null;
+  let secondsLeft = 60;
+
+  // ── Auth ────────────────────────────────────────────────────
+
+  function getToken() { return localStorage.getItem('admin_token') || ''; }
+  function saveToken(t) { localStorage.setItem('admin_token', t); }
+  function clearToken() { localStorage.removeItem('admin_token'); }
+
+  function logout() {
+    clearToken();
+    show('login-screen');
+    hide('dashboard');
+  }
+
+  async function doLogin() {
+    const input = document.getElementById('token-input');
+    const token = input.value.trim();
+    if (!token) return;
+    saveToken(token);
+    const ok = await loadBookings();
+    if (!ok) {
+      clearToken();
+      document.getElementById('login-error').style.display = 'block';
+    }
+  }
+
+  document.getElementById('token-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  // ── Fetch bookings ──────────────────────────────────────────
+
+  async function loadBookings() {
+    const token = getToken();
+    let url = `${API}/admin/bookings?days=30`;
+    if (token) url += `&token=${encodeURIComponent(token)}`;
+
+    try {
+      const resp = await fetch(url);
+      if (resp.status === 401) return false;
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const bookings = await resp.json();
+      render(bookings);
+      show('dashboard');
+      hide('login-screen');
+      resetCountdown();
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  }
+
+  // ── Render ──────────────────────────────────────────────────
+
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+    const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin',
+                    'juil', 'août', 'sep', 'oct', 'nov', 'déc'];
+    return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
+  }
+
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    const h = d.getHours();
+    const m = d.getMinutes().toString().padStart(2, '0');
+    return m === '00' ? `${h}h` : `${h}h${m}`;
+  }
+
+  function fmtDuration(start, end) {
+    const mins = Math.round((new Date(end) - new Date(start)) / 60000);
+    if (mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m ? `${h}h${m.toString().padStart(2, '0')}` : `${h}h`;
+  }
+
+  function badgeHtml(status) {
+    const labels = { confirmed: 'confirmé', completed: 'terminé', no_show: 'absent' };
+    const cls = { confirmed: 'badge-confirmed', completed: 'badge-completed', no_show: 'badge-no_show' };
+    return `<span class="badge ${cls[status] || ''}">${labels[status] || status}</span>`;
+  }
+
+  function render(bookings) {
+    const count = bookings.length;
+    document.getElementById('booking-count').textContent =
+      count === 0 ? 'Aucun rendez-vous à venir'
+      : count === 1 ? '1 rendez-vous à venir'
+      : `${count} rendez-vous à venir`;
+
+    hide('loading');
+
+    if (count === 0) {
+      hide('table-wrap'); hide('cards');
+      show('empty');
+      return;
+    }
+
+    hide('empty');
+    show('table-wrap');
+
+    // Desktop table
+    const tbody = document.getElementById('table-body');
+    tbody.innerHTML = bookings.map(b => `
+      <tr id="row-${b.id}">
+        <td class="td-date">
+          <div class="date-day">${fmtDate(b.start_time)}</div>
+          <div class="date-time">${fmtTime(b.start_time)}</div>
+        </td>
+        <td><strong>${esc(b.client_name)}</strong></td>
+        <td class="td-phone">${b.client_phone ? esc(b.client_phone) : '—'}</td>
+        <td>${esc(b.service_label)}</td>
+        <td class="td-duration">${fmtDuration(b.start_time, b.end_time)}</td>
+        <td>${esc(b.employee_name)}</td>
+        <td>${badgeHtml(b.status)}</td>
+        <td>
+          <button class="btn-cancel" onclick="cancelBooking(${b.id})">Annuler</button>
+        </td>
+      </tr>
+    `).join('');
+
+    // Mobile cards
+    const cards = document.getElementById('cards');
+    cards.innerHTML = bookings.map(b => `
+      <div class="card" id="card-${b.id}">
+        <div class="card-header">
+          <div class="card-datetime">
+            <div class="card-day">${fmtDate(b.start_time)}</div>
+            <div class="card-time">${fmtTime(b.start_time)}</div>
+          </div>
+          ${badgeHtml(b.status)}
+        </div>
+        <div class="card-body">
+          <div class="card-client">${esc(b.client_name)}</div>
+          <div class="card-service">${esc(b.service_label)} · ${esc(b.employee_name)} · ${fmtDuration(b.start_time, b.end_time)}</div>
+          ${b.client_phone ? `<div class="card-phone">${esc(b.client_phone)}</div>` : ''}
+        </div>
+        <div class="card-footer">
+          <button class="btn-cancel" onclick="cancelBooking(${b.id})">Annuler</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ── Cancel ──────────────────────────────────────────────────
+
+  async function cancelBooking(id) {
+    if (!confirm('Annuler ce rendez-vous ?')) return;
+    try {
+      const resp = await fetch(`${API}/bookings/${id}`, { method: 'DELETE' });
+      if (!resp.ok) throw new Error();
+      // Remove row/card from UI
+      document.getElementById(`row-${id}`)?.remove();
+      document.getElementById(`card-${id}`)?.remove();
+      // Update count
+      const rows = document.querySelectorAll('#table-body tr').length;
+      document.getElementById('booking-count').textContent =
+        rows === 0 ? 'Aucun rendez-vous à venir'
+        : rows === 1 ? '1 rendez-vous à venir'
+        : `${rows} rendez-vous à venir`;
+    } catch {
+      alert('Erreur lors de l\'annulation. Veuillez réessayer.');
+    }
+  }
+
+  // ── Countdown ───────────────────────────────────────────────
+
+  function resetCountdown() {
+    secondsLeft = 60;
+    clearInterval(countdownTimer);
+    countdownTimer = setInterval(() => {
+      secondsLeft--;
+      document.getElementById('countdown').textContent =
+        secondsLeft > 0 ? `Actualisation dans ${secondsLeft}s` : '';
+      if (secondsLeft <= 0) {
+        clearInterval(countdownTimer);
+        loadBookings();
+      }
+    }, 1000);
+  }
+
+  // ── Utils ────────────────────────────────────────────────────
+
+  function show(id) { document.getElementById(id).style.display = id === 'cards' ? 'flex' : 'block'; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ── Init ─────────────────────────────────────────────────────
+
+  (async () => {
+    const token = getToken();
+    if (token) {
+      const ok = await loadBookings();
+      if (!ok) { clearToken(); show('login-screen'); }
+    } else {
+      show('login-screen');
+    }
+  })();
+</script>
+</body>
+</html>
