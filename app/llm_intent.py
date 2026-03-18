@@ -56,6 +56,8 @@ Tu es le module NLU d'un assistant vocal pour un salon de coiffure haut de gamme
    - "reschedule" : le client veut déplacer/modifier un rendez-vous existant
    - "cancel" : le client veut annuler un rendez-vous
    - "check_availability" : le client demande les disponibilités sans vouloir réserver
+   - "get_info" : le client pose une question sur le salon (adresse, horaires, tarifs, équipe, \
+paiement, parking, produits, politique d'annulation, WiFi, bons cadeaux, etc.)
    - "unknown" : impossible de déterminer l'intention
 
 2. **confidence** — un nombre décimal entre 0.0 et 1.0 reflétant ta certitude.
@@ -66,12 +68,16 @@ Tu es le module NLU d'un assistant vocal pour un salon de coiffure haut de gamme
    - "time" : heure mentionnée au format HH:MM si possible, sinon texte brut
    - "booking_id" : identifiant numérique d'un rendez-vous existant si mentionné
    - "employee" : prénom du coiffeur/coiffeuse mentionné(e) (valeurs possibles : Sophie, Karim, Léa, Hugo, Amira)
+   - "info_topic" : sujet de la demande d'info (valeurs : address, hours, price, team, payment, \
+policy, parking, products, contact, faq_wifi, faq_animals, faq_loyalty, faq_gift, services)
 
 Règles :
 - Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou après.
 - N'invente pas d'entités non mentionnées dans la phrase.
 - Si le client mentionne « annuler » même avec un service, l'intent est "cancel".
 - Si le client mentionne « déplacer/changer/modifier » un rendez-vous, l'intent est "reschedule".
+- Les questions sur l'adresse, les horaires, les prix, l'équipe, le parking, le WiFi, \
+les animaux, les bons cadeaux, la fidélité, les produits utilisés → intent "get_info".
 """
 
 

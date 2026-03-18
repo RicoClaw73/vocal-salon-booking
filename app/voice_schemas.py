@@ -29,6 +29,7 @@ class VoiceIntent(str, enum.Enum):
     reschedule = "reschedule"
     cancel = "cancel"
     check_availability = "check_availability"
+    get_info = "get_info"
     unknown = "unknown"
 
 

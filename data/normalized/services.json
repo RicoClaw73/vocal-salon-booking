@@ -1,10 +1,10 @@
 {
   "_meta": {
-    "version": "1.0.0",
+    "version": "2.0.0",
     "salon_fictif": "Maison Éclat",
     "adresse": "42 rue des Petits-Champs, 75002 Paris",
     "positionnement": "Milieu-haut de gamme parisien",
-    "notes": "Catalogue normalisé à partir du benchmark de 7 salons parisiens. Positionnement tarifaire entre Atelier 58 et Cool & Shape. Prix indicatifs arrondis."
+    "notes": "Catalogue normalisé à partir du benchmark de 7 salons parisiens (v1) + ajouts v2 : permanente, retouche racines, lissage brésilien, brushing homme, forfait coupe+barbe. Prix indicatifs arrondis."
   },
   "categories": [
     {
@@ -14,32 +14,32 @@
         {
           "id": "coupe_femme_court",
           "label": "Coupe femme — cheveux courts",
-          "description": "Shampoing, coupe, brushing ou séchage naturel",
+          "description": "Shampoing, coupe sur-mesure, brushing ou séchage naturel",
           "prix_eur": 48,
           "duree_min": 45,
           "genre": "F",
           "longueur": "court",
-          "notes": "Benchmark : 38-52€ milieu de gamme Paris"
+          "notes": "Benchmark : 38-52 € milieu de gamme Paris"
         },
         {
           "id": "coupe_femme_mi_long",
           "label": "Coupe femme — cheveux mi-longs",
-          "description": "Shampoing, coupe, brushing",
+          "description": "Shampoing, coupe sur-mesure, brushing",
           "prix_eur": 58,
           "duree_min": 60,
           "genre": "F",
           "longueur": "mi-long",
-          "notes": "Benchmark : 46-75€"
+          "notes": "Benchmark : 46-75 €"
         },
         {
           "id": "coupe_femme_long",
           "label": "Coupe femme — cheveux longs",
-          "description": "Shampoing, coupe, brushing",
+          "description": "Shampoing, coupe sur-mesure, brushing",
           "prix_eur": 68,
           "duree_min": 75,
           "genre": "F",
           "longueur": "long",
-          "notes": "Benchmark : 60-90€"
+          "notes": "Benchmark : 60-90 €"
         },
         {
           "id": "coupe_homme",
@@ -49,27 +49,27 @@
           "duree_min": 30,
           "genre": "M",
           "longueur": "court",
-          "notes": "Benchmark : 27-38€"
+          "notes": "Benchmark : 27-38 €"
         },
         {
           "id": "coupe_enfant",
           "label": "Coupe enfant (moins de 12 ans)",
-          "description": "Shampoing, coupe, séchage",
+          "description": "Shampoing, coupe, séchage — enfants accompagnés uniquement",
           "prix_eur": 22,
           "duree_min": 25,
           "genre": "mixte",
           "longueur": "tout",
-          "notes": "Benchmark : 12-46€ — positionné accessible"
+          "notes": "Benchmark : 12-46 € — positionné accessible"
         },
         {
           "id": "coupe_transformation",
           "label": "Coupe transformation",
-          "description": "Consultation approfondie, coupe créative, soin, coiffage",
+          "description": "Consultation approfondie, coupe créative, soin, coiffage — changement radical de look",
           "prix_eur": 95,
           "duree_min": 90,
           "genre": "mixte",
           "longueur": "tout",
-          "notes": "Changement radical de style. Benchmark : 30-135€"
+          "notes": "Réservé aux niveaux expert et senior. Benchmark : 30-135 €"
         },
         {
           "id": "frange",
@@ -84,7 +84,7 @@
     },
     {
       "id": "coloration",
-      "label": "Colorations",
+      "label": "Colorations & Techniques",
       "services": [
         {
           "id": "couleur_complete_court",
@@ -94,7 +94,7 @@
           "duree_min": 90,
           "genre": "F",
           "longueur": "court",
-          "notes": "Benchmark : 40-95€. Temps de pose inclus."
+          "notes": "Temps de pose inclus. Benchmark : 40-95 €"
         },
         {
           "id": "couleur_complete_mi_long",
@@ -104,7 +104,7 @@
           "duree_min": 105,
           "genre": "F",
           "longueur": "mi-long",
-          "notes": "Benchmark : 49-100€"
+          "notes": "Benchmark : 49-100 €"
         },
         {
           "id": "couleur_complete_long",
@@ -114,7 +114,36 @@
           "duree_min": 120,
           "genre": "F",
           "longueur": "long",
-          "notes": "Benchmark : 73-110€"
+          "notes": "Benchmark : 73-110 €"
+        },
+        {
+          "id": "retouche_racines_court",
+          "label": "Retouche racines — cheveux courts",
+          "description": "Retouche couleur sur les racines uniquement, shampoing, soin, coiffage",
+          "prix_eur": 45,
+          "duree_min": 60,
+          "genre": "F",
+          "longueur": "court",
+          "notes": "Prestation fréquente entre deux colorations complètes (toutes les 4-8 semaines)"
+        },
+        {
+          "id": "retouche_racines_mi_long",
+          "label": "Retouche racines — cheveux mi-longs",
+          "description": "Retouche couleur sur les racines uniquement, shampoing, soin, brushing",
+          "prix_eur": 55,
+          "duree_min": 75,
+          "genre": "F",
+          "longueur": "mi-long",
+          "notes": "Conseillée toutes les 4-8 semaines selon la vitesse de pousse"
+        },
+        {
+          "id": "retouche_racines_long",
+          "label": "Retouche racines — cheveux longs",
+          "description": "Retouche couleur sur les racines uniquement, shampoing, soin, brushing",
+          "prix_eur": 65,
+          "duree_min": 90,
+          "genre": "F",
+          "longueur": "long"
         },
         {
           "id": "balayage_court",
@@ -124,7 +153,7 @@
           "duree_min": 120,
           "genre": "F",
           "longueur": "court",
-          "notes": "Benchmark : 45-175€"
+          "notes": "Benchmark : 45-175 €"
         },
         {
           "id": "balayage_mi_long",
@@ -134,7 +163,7 @@
           "duree_min": 150,
           "genre": "F",
           "longueur": "mi-long",
-          "notes": "Benchmark : 62-215€"
+          "notes": "Benchmark : 62-215 €"
         },
         {
           "id": "balayage_long",
@@ -144,37 +173,37 @@
           "duree_min": 180,
           "genre": "F",
           "longueur": "long",
-          "notes": "Benchmark : 72-320€"
+          "notes": "Benchmark : 72-320 €"
         },
         {
           "id": "meches_court",
           "label": "Mèches — cheveux courts",
-          "description": "Mèches au papier ou bonnet, shampoing, soin, brushing",
+          "description": "Mèches au papier aluminium, shampoing, soin, brushing",
           "prix_eur": 75,
           "duree_min": 105,
           "genre": "F",
           "longueur": "court",
-          "notes": "Benchmark : 60-90€"
+          "notes": "Benchmark : 60-90 €"
         },
         {
           "id": "meches_mi_long",
           "label": "Mèches — cheveux mi-longs",
-          "description": "Mèches au papier, shampoing, soin, brushing",
+          "description": "Mèches au papier aluminium, shampoing, soin, brushing",
           "prix_eur": 90,
           "duree_min": 135,
           "genre": "F",
           "longueur": "mi-long",
-          "notes": "Benchmark : 69-120€"
+          "notes": "Benchmark : 69-120 €"
         },
         {
           "id": "meches_long",
           "label": "Mèches — cheveux longs",
-          "description": "Mèches au papier, shampoing, soin, brushing",
+          "description": "Mèches au papier aluminium, shampoing, soin, brushing",
           "prix_eur": 110,
           "duree_min": 165,
           "genre": "F",
           "longueur": "long",
-          "notes": "Benchmark : 80-150€"
+          "notes": "Benchmark : 80-150 €"
         },
         {
           "id": "couleur_homme",
@@ -184,17 +213,55 @@
           "duree_min": 60,
           "genre": "M",
           "longueur": "court",
-          "notes": "Benchmark : 35-40€"
+          "notes": "Benchmark : 35-40 €"
         },
         {
           "id": "decoloration",
           "label": "Décoloration",
-          "description": "Décoloration complète, shampoing, soin",
+          "description": "Décoloration complète, shampoing, soin restructurant",
           "prix_eur": 70,
           "duree_min": 120,
           "genre": "mixte",
           "longueur": "tout",
-          "notes": "Durée très variable selon état du cheveu. Hypothèse : cheveux mi-longs vierges."
+          "notes": "Durée variable selon historique colorimétrique. Hypothèse : cheveux vierges mi-longs. Diagnostic préalable obligatoire."
+        },
+        {
+          "id": "permanente_court",
+          "label": "Permanente — cheveux courts",
+          "description": "Permanente classique : enroulage, temps de pose, neutralisation, shampoing, coiffage",
+          "prix_eur": 80,
+          "duree_min": 120,
+          "genre": "F",
+          "longueur": "court",
+          "notes": "Prestation chimique intensive. Diagnostic capillaire préalable obligatoire. Déconseillée sur cheveux très abîmés ou décolorés."
+        },
+        {
+          "id": "permanente_mi_long",
+          "label": "Permanente — cheveux mi-longs",
+          "description": "Permanente classique : enroulage, temps de pose, neutralisation, shampoing, brushing",
+          "prix_eur": 100,
+          "duree_min": 150,
+          "genre": "F",
+          "longueur": "mi-long"
+        },
+        {
+          "id": "permanente_long",
+          "label": "Permanente — cheveux longs",
+          "description": "Permanente classique : enroulage, temps de pose, neutralisation, shampoing, brushing",
+          "prix_eur": 125,
+          "duree_min": 180,
+          "genre": "F",
+          "longueur": "long"
+        },
+        {
+          "id": "lissage_bresilien",
+          "label": "Lissage brésilien",
+          "description": "Traitement lissant semi-permanent à la kératine : application, séchage, lissage au fer — résultat 3 à 5 mois",
+          "prix_eur": 120,
+          "duree_min": 150,
+          "genre": "mixte",
+          "longueur": "tout",
+          "notes": "Prix pour cheveux mi-longs. Benchmark Paris : 80-200 €. Diagnostic capillaire préalable obligatoire. Ne pas laver les cheveux 3 jours après."
         }
       ]
     },
@@ -230,19 +297,28 @@
           "longueur": "long"
         },
         {
+          "id": "brushing_homme",
+          "label": "Brushing homme",
+          "description": "Shampoing et coiffage homme",
+          "prix_eur": 18,
+          "duree_min": 20,
+          "genre": "M",
+          "longueur": "court"
+        },
+        {
           "id": "chignon",
           "label": "Chignon / Coiffure événement",
-          "description": "Mise en forme élaborée pour occasion spéciale",
+          "description": "Mise en forme élaborée pour occasion spéciale : chignon, tresse, ondulations",
           "prix_eur": 55,
           "duree_min": 60,
           "genre": "F",
           "longueur": "tout",
-          "notes": "Benchmark : 35-150€ — positionné milieu sans forfait mariage"
+          "notes": "Benchmark : 35-150 €. Pour coiffure de mariée, voir forfait mariée."
         },
         {
           "id": "mise_en_plis",
           "label": "Mise en plis",
-          "description": "Shampoing et mise en plis classique",
+          "description": "Shampoing et mise en plis classique avec rouleaux",
           "prix_eur": 25,
           "duree_min": 45,
           "genre": "F",
@@ -257,7 +333,7 @@
         {
           "id": "soin_express",
           "label": "Soin express",
-          "description": "Soin rapide après shampoing, sans rinçage ou rinçage rapide",
+          "description": "Soin rapide après shampoing, sans rinçage ou rinçage rapide — complément à toute prestation",
           "prix_eur": 15,
           "duree_min": 10,
           "genre": "mixte",
@@ -266,7 +342,7 @@
         {
           "id": "soin_profond",
           "label": "Soin profond / Masque",
-          "description": "Application masque restructurant, temps de pose sous casque",
+          "description": "Application masque restructurant, temps de pose sous casque chauffant",
           "prix_eur": 30,
           "duree_min": 25,
           "genre": "mixte",
@@ -274,23 +350,23 @@
         },
         {
           "id": "soin_keratine",
-          "label": "Soin kératine",
-          "description": "Traitement kératine lissant et réparateur",
+          "label": "Soin kératine (Olaplex)",
+          "description": "Traitement kératine restructurant et lissant — idéal après coloration ou décoloration",
           "prix_eur": 55,
           "duree_min": 90,
           "genre": "mixte",
           "longueur": "tout",
-          "notes": "Durée variable 60-120min selon longueur. Hypothèse : mi-longs."
+          "notes": "Durée variable 60-120 min selon longueur. Hypothèse : cheveux mi-longs."
         },
         {
           "id": "soin_botox",
           "label": "Soin Botox capillaire",
-          "description": "Traitement botox reconstructif en profondeur",
+          "description": "Traitement botox reconstructif en profondeur — lisse, nourrit et répare la fibre capillaire",
           "prix_eur": 65,
           "duree_min": 90,
           "genre": "mixte",
           "longueur": "tout",
-          "notes": "Benchmark : 51-55€ — positionné légèrement au-dessus"
+          "notes": "Benchmark : 51-55 € — positionné légèrement au-dessus. Résultat dure 2-3 mois."
         }
       ]
     },
@@ -301,32 +377,42 @@
         {
           "id": "taille_barbe",
           "label": "Taille de barbe",
-          "description": "Taille et mise en forme de la barbe",
+          "description": "Taille, contour et mise en forme de la barbe",
           "prix_eur": 15,
           "duree_min": 20,
           "genre": "M",
           "longueur": "tout",
-          "notes": "Benchmark : 10-15€"
+          "notes": "Benchmark : 10-15 €"
         },
         {
           "id": "rasage_traditionnel",
           "label": "Rasage traditionnel",
-          "description": "Rasage au blaireau et serviette chaude",
+          "description": "Rasage au blaireau, serviette chaude, baume après-rasage",
           "prix_eur": 25,
           "duree_min": 30,
           "genre": "M",
           "longueur": "tout",
-          "notes": "Hypothèse : prestation type barbershop intégrée au salon"
+          "notes": "Prestation type barbershop intégrée au salon"
         },
         {
           "id": "couleur_barbe",
           "label": "Coloration barbe",
-          "description": "Camouflage cheveux blancs de la barbe",
+          "description": "Camouflage des cheveux blancs de la barbe, application colorant doux",
           "prix_eur": 25,
           "duree_min": 25,
           "genre": "M",
           "longueur": "tout",
-          "notes": "Benchmark : 40€ Cool&Shape — positionné plus accessible"
+          "notes": "Benchmark : 40 € Cool&Shape — positionné plus accessible"
+        },
+        {
+          "id": "forfait_coupe_barbe",
+          "label": "Forfait Coupe + Barbe",
+          "description": "Coupe homme, taille et mise en forme de la barbe, shampoing, coiffage",
+          "prix_eur": 42,
+          "duree_min": 45,
+          "genre": "M",
+          "longueur": "court",
+          "notes": "Remise vs services séparés (47 €). Benchmark Paris : 35-60 €"
         }
       ]
     },
@@ -337,17 +423,17 @@
         {
           "id": "forfait_couleur_coupe_court",
           "label": "Forfait Couleur + Coupe — courts",
-          "description": "Coloration, coupe, soin, brushing — cheveux courts",
+          "description": "Coloration complète, coupe, soin, brushing — cheveux courts",
           "prix_eur": 95,
           "duree_min": 120,
           "genre": "F",
           "longueur": "court",
-          "notes": "Remise ~10% vs services séparés"
+          "notes": "Remise ~10 % vs services séparés"
         },
         {
           "id": "forfait_couleur_coupe_mi_long",
           "label": "Forfait Couleur + Coupe — mi-longs",
-          "description": "Coloration, coupe, soin, brushing — cheveux mi-longs",
+          "description": "Coloration complète, coupe, soin, brushing — cheveux mi-longs",
           "prix_eur": 115,
           "duree_min": 135,
           "genre": "F",
@@ -356,7 +442,7 @@
         {
           "id": "forfait_couleur_coupe_long",
           "label": "Forfait Couleur + Coupe — longs",
-          "description": "Coloration, coupe, soin, brushing — cheveux longs",
+          "description": "Coloration complète, coupe, soin, brushing — cheveux longs",
           "prix_eur": 135,
           "duree_min": 150,
           "genre": "F",
@@ -365,7 +451,7 @@
         {
           "id": "forfait_balayage_coupe_mi_long",
           "label": "Forfait Balayage + Coupe — mi-longs",
-          "description": "Balayage, coupe, soin, brushing — cheveux mi-longs",
+          "description": "Balayage sur-mesure, coupe, soin, brushing — cheveux mi-longs",
           "prix_eur": 145,
           "duree_min": 180,
           "genre": "F",
@@ -374,7 +460,7 @@
         {
           "id": "forfait_balayage_coupe_long",
           "label": "Forfait Balayage + Coupe — longs",
-          "description": "Balayage, coupe, soin, brushing — cheveux longs",
+          "description": "Balayage sur-mesure, coupe, soin, brushing — cheveux longs",
           "prix_eur": 175,
           "duree_min": 210,
           "genre": "F",
@@ -383,12 +469,12 @@
         {
           "id": "forfait_mariage",
           "label": "Forfait Mariée",
-          "description": "Essai coiffure + jour J (chignon ou coiffure élaborée)",
+          "description": "Essai coiffure (60 min, planifié séparément) + coiffure jour J (chignon ou coiffure élaborée) — prix jour J uniquement",
           "prix_eur": 250,
           "duree_min": 120,
           "genre": "F",
           "longueur": "tout",
-          "notes": "Durée jour J uniquement. Essai planifié séparément (~60min). Benchmark : 150€ Atelier 58."
+          "notes": "Acompte 30 % à la réservation. Uniquement Sophie (directrice artistique). Benchmark : 150 € Atelier 58."
         }
       ]
     }

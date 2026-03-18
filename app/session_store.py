@@ -60,6 +60,13 @@ def _row_to_state(row: VoiceSession) -> ConversationState:
     except ValueError:
         status = SessionStatus.active
 
+    messages: list = []
+    if row.messages_json:
+        try:
+            messages = json.loads(row.messages_json)
+        except (json.JSONDecodeError, TypeError):
+            messages = []
+
     state = ConversationState(
         session_id=row.session_id,
         status=status,
@@ -71,6 +78,7 @@ def _row_to_state(row: VoiceSession) -> ConversationState:
         channel=row.channel,
         created_at=_ensure_aware(row.created_at),
         last_activity=_ensure_aware(row.last_activity),
+        messages=messages,
     )
     return state
 
@@ -87,6 +95,7 @@ def _state_to_row_dict(state: ConversationState) -> dict:
         "client_phone": state.client_phone,
         "channel": state.channel,
         "last_activity": state.last_activity,
+        "messages_json": json.dumps(state.messages) if state.messages else "[]",
     }
 
 
@@ -131,6 +140,7 @@ async def create_session(
         turns=0,
         created_at=now,
         last_activity=now,
+        messages_json="[]",
     )
     db.add(row)
     await db.flush()  # get defaults populated

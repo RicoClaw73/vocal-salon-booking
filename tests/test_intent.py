@@ -52,10 +52,14 @@ class TestIntentClassification:
         assert result.confidence == 1.0
 
     @pytest.mark.parametrize("text,expected", [
-        ("Quand est-ce que le salon est ouvert ?", VoiceIntent.check_availability),
-        ("Quels sont les horaires demain ?", VoiceIntent.check_availability),
+        # Slot availability — check_availability
+        ("Y a-t-il des créneaux libres jeudi ?", VoiceIntent.check_availability),
+        ("Êtes-vous disponible vendredi matin ?", VoiceIntent.check_availability),
+        # Hours/opening queries — correctly routed to get_info
+        ("Quand est-ce que le salon est ouvert ?", VoiceIntent.get_info),
+        ("Quels sont vos horaires ?", VoiceIntent.get_info),
     ])
-    def test_availability_intent(self, text: str, expected: VoiceIntent):
+    def test_availability_and_info_intent(self, text: str, expected: VoiceIntent):
         result = extract_intent(text)
         assert result.intent == expected
 

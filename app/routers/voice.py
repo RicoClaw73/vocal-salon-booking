@@ -107,19 +107,20 @@ _FALLBACK_RESPONSES: list[str] = [
     (
         "Je n'ai pas bien compris votre demande. Je peux vous aider à :\n"
         "• Prendre un rendez-vous\n"
-        "• Modifier un rendez-vous existant\n"
-        "• Annuler un rendez-vous\n"
+        "• Modifier ou annuler un rendez-vous\n"
         "• Vérifier les disponibilités\n"
+        "• Répondre à vos questions sur le salon (adresse, horaires, tarifs…)\n"
         "Pourriez-vous reformuler ?"
     ),
     (
         "Pardon, je n'ai pas saisi. Vous pouvez me dire par exemple : "
-        "\"je voudrais réserver une coupe\" ou \"annuler ma réservation numéro 5\"."
+        "\"je voudrais réserver une coupe\", \"annuler ma réservation numéro 5\", "
+        "ou \"quels sont vos horaires ?\"."
     ),
     (
         "Je suis désolé, je ne comprends toujours pas. "
-        "Essayez de me dire quel service vous intéresse (coupe, couleur, balayage…) "
-        "ou donnez-moi votre numéro de réservation."
+        "Essayez de me dire quel service vous intéresse (coupe, couleur, balayage…), "
+        "votre numéro de réservation, ou posez-moi une question sur le salon."
     ),
 ]
 """Rotating fallback messages — vary phrasing to avoid frustrating the caller."""
@@ -130,7 +131,7 @@ MAX_CONSECUTIVE_FALLBACKS = 3
 _HUMAN_TRANSFER_MSG = (
     "Il semble que j'aie du mal à vous comprendre. "
     "Souhaitez-vous être mis en relation avec un membre de notre équipe ? "
-    "Vous pouvez aussi rappeler au 01 23 45 67 89."
+    "Vous pouvez aussi nous rappeler directement au 01 42 60 74 28."
 )
 
 # ── Provider singletons (config-driven, mock default) ──────
@@ -1057,6 +1058,18 @@ async def _handle_check_availability(
     )
 
 
+async def _handle_get_info(
+    state: ConversationState, entities: dict, db: AsyncSession
+) -> tuple[str, str | None, dict | None]:
+    """Handle get_info intent — answer questions about the salon."""
+    from app.salon_info import get_info_response
+
+    info_topic = entities.get("info_topic")
+    # Pass the raw user text via state if topic wasn't resolved by entity extractor
+    response = get_info_response(info_topic)
+    return response, "info_provided", {"info_topic": info_topic}
+
+
 async def _handle_unknown(
     state: ConversationState, entities: dict, db: AsyncSession
 ) -> tuple[str, str | None, dict | None]:
@@ -1064,9 +1077,9 @@ async def _handle_unknown(
     return (
         "Je n'ai pas bien compris. Je peux vous aider à :\n"
         "• Prendre un rendez-vous\n"
-        "• Modifier un rendez-vous existant\n"
-        "• Annuler un rendez-vous\n"
+        "• Modifier ou annuler un rendez-vous\n"
         "• Vérifier les disponibilités\n"
+        "• Répondre à vos questions sur le salon (adresse, horaires, tarifs…)\n"
         "Que souhaitez-vous faire ?",
         None,
         None,
@@ -1121,6 +1134,7 @@ _INTENT_HANDLERS = {
     VoiceIntent.reschedule: _handle_reschedule,
     VoiceIntent.cancel: _handle_cancel,
     VoiceIntent.check_availability: _handle_check_availability,
+    VoiceIntent.get_info: _handle_get_info,
     VoiceIntent.unknown: _handle_unknown,
 }
 

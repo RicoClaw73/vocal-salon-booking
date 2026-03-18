@@ -321,7 +321,8 @@ class TestExtractIntentAsync:
                 "Quand est-ce que le salon est ouvert ?"
             )
 
-        assert result.intent == VoiceIntent.check_availability
+        # Hours query → get_info (not check_availability — that's for slot queries)
+        assert result.intent == VoiceIntent.get_info
 
     async def test_fallback_on_invalid_response(self):
         """On invalid LLM JSON, should fall back to rule-based."""

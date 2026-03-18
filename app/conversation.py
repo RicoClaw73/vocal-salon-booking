@@ -33,6 +33,8 @@ class ConversationState:
     channel: str = "phone"
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # LLM conversation history (OpenAI messages format, no system message)
+    messages: list = field(default_factory=list)
 
     def touch(self) -> None:
         """Update last_activity timestamp."""

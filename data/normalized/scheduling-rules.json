@@ -27,6 +27,8 @@
         "balayage_court", "balayage_mi_long", "balayage_long",
         "meches_court", "meches_mi_long", "meches_long",
         "decoloration", "coupe_transformation",
+        "permanente_court", "permanente_mi_long", "permanente_long",
+        "lissage_bresilien",
         "forfait_mariage", "soin_keratine", "soin_botox",
         "forfait_balayage_coupe_mi_long", "forfait_balayage_coupe_long"
       ],
@@ -49,9 +51,12 @@
       "apres_chimique_min": 15,
       "services_chimiques": [
         "couleur_complete_court", "couleur_complete_mi_long", "couleur_complete_long",
+        "retouche_racines_court", "retouche_racines_mi_long", "retouche_racines_long",
         "balayage_court", "balayage_mi_long", "balayage_long",
         "meches_court", "meches_mi_long", "meches_long",
-        "decoloration", "permanente",
+        "decoloration",
+        "permanente_court", "permanente_mi_long", "permanente_long",
+        "lissage_bresilien",
         "forfait_couleur_coupe_court", "forfait_couleur_coupe_mi_long", "forfait_couleur_coupe_long",
         "forfait_balayage_coupe_mi_long", "forfait_balayage_coupe_long"
       ],

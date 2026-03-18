@@ -176,6 +176,8 @@ class VoiceSession(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_activity: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # LLM conversation history — JSON array of OpenAI messages dicts
+    messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # relationships
     events: Mapped[list["TranscriptEvent"]] = relationship(

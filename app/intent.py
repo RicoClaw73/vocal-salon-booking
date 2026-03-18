@@ -45,7 +45,7 @@ _SERVICES_RE = r"coupe|coiffure|couleur|balayage|mèche|brushing|soin|chignon|ma
 _BOOK_PATTERNS: list[re.Pattern] = [
     re.compile(r"(réserv|prendre|book|rdv|rendez[\s-]?vous|appointment)", _FLAGS),
     re.compile(
-        rf"(je\s+vou[sd]rais|j['\u2019]aimerais|i['\u2019]?d?\s*like).*({_SERVICES_RE})",
+        rf"(je\s+vou[sd]rais|je\s+veux|j['\u2019]aimerais|j['\u2019]ai\s+besoin|i['\u2019]?d?\s*like).*({_SERVICES_RE})",
         _FLAGS,
     ),
     # "disponibilités pour un [service]" implies booking intent
@@ -62,8 +62,21 @@ _CANCEL_PATTERNS: list[re.Pattern] = [
 ]
 
 _AVAILABILITY_PATTERNS: list[re.Pattern] = [
-    re.compile(r"(disponib|available|libre|free|créneau|slot|quand|when|horaire)", _FLAGS),
-    re.compile(r"(ouvert|open)", _FLAGS),
+    re.compile(r"(disponib|available|libre|free|créneau|slot)", _FLAGS),
+]
+
+_INFO_PATTERNS: list[re.Pattern] = [
+    re.compile(r"(adresse|o[uù]\s+(êtes|se\s+trou|trouver)|chemin|itinéraire|locat)", _FLAGS),
+    re.compile(r"(horaire|ouvr|ferm[eé]|fermeture|ouverture|quand\b.*ouv)", _FLAGS),
+    re.compile(r"(tarif|prix|co[uû]t|combien|cher|budget)", _FLAGS),
+    re.compile(r"(équipe|coiffeur|coiffeuse|qui\s+(est|sont|fait|travail)|personnel|staff)", _FLAGS),
+    re.compile(r"(paiement|payer|espèce|chèque|apple.pay|google.pay|carte\s+bancaire|moyen\s+de\s+paiement|acceptez.vous)", _FLAGS),
+    re.compile(r"(politique\s+annulation|conditions\s+annulation|frais\s+annulation|acompte)", _FLAGS),
+    re.compile(r"(produit|marque|wella|kérastase|olaplex)", _FLAGS),
+    re.compile(r"(parking|vélo|vélib|bus|rer\b|métro|comment\s+venir)", _FLAGS),
+    re.compile(r"(téléphone|numéro|email|instagram|facebook|joindre|nous\s+appeler)", _FLAGS),
+    re.compile(r"(wifi|wi-fi|animaux?|extensions?|fidélité|bon\s+cadeau)", _FLAGS),
+    re.compile(r"(que\s+propos|qu['\u2019]est[- ]ce\s+que\s+vous|catalogue\s+de\s+prestation)", _FLAGS),
 ]
 
 # ── Entity extraction patterns ───────────────────────────────
@@ -153,10 +166,16 @@ def extract_intent(text: str) -> IntentResult:
         # Heuristic: if they mention a service or say "prendre rendez-vous", it's book.
         return IntentResult(intent=VoiceIntent.book, confidence=1.0, entities=entities)
 
-    # Availability check — informational queries
+    # Availability check — informational queries about slots
     if any(p.search(text) for p in _AVAILABILITY_PATTERNS):
         return IntentResult(
             intent=VoiceIntent.check_availability, confidence=1.0, entities=entities,
+        )
+
+    # Salon info — questions about address, hours, price, team, etc.
+    if any(p.search(text) for p in _INFO_PATTERNS):
+        return IntentResult(
+            intent=VoiceIntent.get_info, confidence=1.0, entities=entities,
         )
 
     return IntentResult(intent=VoiceIntent.unknown, confidence=0.0, entities=entities)
@@ -210,6 +229,34 @@ def _extract_entities(text: str) -> dict:
         if re.search(rf"\b{re.escape(normalized)}\b", text_lower):
             entities["employee_name"] = display
             break
+
+    # Info topic hints (for get_info intent routing)
+    if re.search(r"(adresse|o[uù]\s+(êtes|se\s+trou|trouver)|chemin|itinéraire|localisation)", text_lower):
+        entities["info_topic"] = "address"
+    elif re.search(r"(horaire|quand\s+ouvr|quand\s+ferm|heure\s+d[' \u2019]ouverture)", text_lower):
+        entities["info_topic"] = "hours"
+    elif re.search(r"(tarif|prix|co[uû]t|combien|cher|budget)", text_lower):
+        entities["info_topic"] = "price"
+    elif re.search(r"(équipe|qui\s+(est|sont|fait|travail)|personnel|staff)", text_lower):
+        entities["info_topic"] = "team"
+    elif re.search(r"(paiement|payer|espèce|chèque|apple.pay|google.pay|carte\s+bancaire|moyen\s+de\s+paiement)", text_lower):
+        entities["info_topic"] = "payment"
+    elif re.search(r"(annulation|politique|conditions?|retard|acompte)", text_lower):
+        entities["info_topic"] = "policy"
+    elif re.search(r"(parking|vélo|vélib|bus|rer\b|métro|comment\s+venir)", text_lower):
+        entities["info_topic"] = "parking"
+    elif re.search(r"(produit|marque|wella|kérastase|olaplex)", text_lower):
+        entities["info_topic"] = "products"
+    elif re.search(r"(votre\s+téléphone|votre\s+numéro|email|instagram|facebook|nous\s+contacter|nous\s+joindre)", text_lower):
+        entities["info_topic"] = "contact"
+    elif re.search(r"(wifi|wi-fi)", text_lower):
+        entities["info_topic"] = "faq_wifi"
+    elif re.search(r"(animaux?|chien|chat)", text_lower):
+        entities["info_topic"] = "faq_animals"
+    elif re.search(r"(fidélité|carte\s+fid)", text_lower):
+        entities["info_topic"] = "faq_loyalty"
+    elif re.search(r"(bon\s+cadeau|gift\s+card|cadeau)", text_lower):
+        entities["info_topic"] = "faq_gift"
 
     # Hair length hints
     if re.search(r"(courts?\b|short)", text_lower):
@@ -276,6 +323,8 @@ async def extract_intent_async(text: str) -> IntentResult:
             pass  # Keep rule-based booking_id if LLM gave garbage
     if "employee" in llm_ent and llm_ent["employee"]:
         merged_entities.setdefault("employee_name", llm_ent["employee"])
+    if "info_topic" in llm_ent and llm_ent["info_topic"]:
+        merged_entities.setdefault("info_topic", llm_ent["info_topic"])
 
     return IntentResult(
         intent=llm_result.intent,

@@ -1,0 +1,119 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "notes": "Fiche identité complète du salon fictif Maison Éclat. Utilisée par l'agent vocal pour répondre aux questions générales (adresse, horaires, tarifs, politique, accès)."
+  },
+  "nom": "Maison Éclat",
+  "slogan": "L'excellence capillaire au cœur de Paris",
+  "fondation": 2011,
+  "adresse": {
+    "rue": "42 rue des Petits-Champs",
+    "code_postal": "75002",
+    "ville": "Paris",
+    "arrondissement": "2e arrondissement",
+    "quartier": "Palais-Royal / Vivienne",
+    "complement": "Rez-de-chaussée — entrée au numéro 42, interphone Maison Éclat"
+  },
+  "acces": {
+    "metro": [
+      "Pyramides — lignes 7 et 14 (3 min à pied)",
+      "Quatre-Septembre — ligne 3 (5 min à pied)",
+      "Palais Royal–Musée du Louvre — lignes 1 et 7 (7 min à pied)"
+    ],
+    "rer": ["RER A — Châtelet-Les Halles (12 min à pied)"],
+    "bus": ["Lignes 29, 39, 68, 95 — arrêt Petits-Champs"],
+    "parking": "Parking public Victoires — 19 rue Étienne Marcel (250 m à pied)",
+    "velo": "Station Vélib' au 38 rue des Petits-Champs (50 m)"
+  },
+  "contact": {
+    "telephone": "01 42 60 74 28",
+    "email": "contact@maison-eclat.fr",
+    "instagram": "@maison.eclat.paris",
+    "facebook": "MaisonEclatParis",
+    "site_web": "www.maison-eclat.fr",
+    "notes": "Réservations de préférence par téléphone ou via notre site. Réponse aux messages Instagram sous 24h."
+  },
+  "horaires": {
+    "lundi": null,
+    "mardi": {"debut": "09:00", "fin": "19:00"},
+    "mercredi": {"debut": "09:00", "fin": "19:00"},
+    "jeudi": {"debut": "10:00", "fin": "20:00"},
+    "vendredi": {"debut": "09:00", "fin": "20:00"},
+    "samedi": {"debut": "09:00", "fin": "18:00"},
+    "dimanche": null,
+    "notes": "Fermé le dimanche, le lundi et les jours fériés français. Des ouvertures exceptionnelles peuvent être organisées pour les mariages sur devis."
+  },
+  "equipe": {
+    "taille": 5,
+    "description": "Sophie (directrice artistique), Karim (coiffeur senior et barbier), Léa (coloriste), Hugo (coiffeur junior), Amira (apprentie)",
+    "langues": ["Français", "Anglais", "Arabe (Karim)"]
+  },
+  "paiements": {
+    "acceptes": [
+      "Carte bancaire (Visa, Mastercard, American Express, CB)",
+      "Paiement sans contact (Apple Pay, Google Pay)",
+      "Espèces",
+      "Chèques bancaires",
+      "Virement bancaire (forfaits mariée et prestations > 200 € uniquement)"
+    ],
+    "acompte": "Un acompte de 30 % est demandé pour les forfaits mariée et les prestations au-dessus de 150 €, à régler lors de la confirmation du rendez-vous.",
+    "devis": "Un devis gratuit est établi avant toute prestation technique importante (coloration, balayage, lissage, permanente)."
+  },
+  "accessibilite": {
+    "pmr": false,
+    "note": "Le salon est de plain-pied mais présente un léger pas de seuil (3 cm) à l'entrée. Les clients en fauteuil roulant sont invités à nous appeler avant leur visite pour organiser leur accueil."
+  },
+  "politique": {
+    "reservation": "Nous travaillons uniquement sur rendez-vous. La réservation est obligatoire, en ligne sur notre site ou par téléphone au 01 42 60 74 28.",
+    "annulation": {
+      "delai_gratuit_heures": 24,
+      "description": "Annulation sans frais jusqu'à 24 heures avant le rendez-vous. En dessous de ce délai, 50 % du montant de la prestation pourra être retenu."
+    },
+    "retard": "Au-delà de 15 minutes de retard, le rendez-vous peut être raccourci ou reporté à une date ultérieure selon les disponibilités.",
+    "nouveau_client": "Pour tout nouveau client souhaitant une prestation technique (coloration, balayage, lissage, permanente), un diagnostic capillaire est réalisé systématiquement avant la prestation. Ce bilan est offert.",
+    "enfants": "Les coupes enfant sont acceptées pour les moins de 12 ans. Les enfants doivent être accompagnés d'un adulte durant toute la prestation.",
+    "photos": "Avec votre accord, nous pouvons photographier votre coiffure pour nos réseaux sociaux. Nous vous en informons toujours avant."
+  },
+  "positionnement": "Salon milieu-haut de gamme parisien, reconnu pour la coloration créative, les balayages sur-mesure et les coiffures événementielles. Positionnement tarifaire entre le salon de quartier et le salon de prestige.",
+  "specialites": [
+    "Balayage et coloration créative : ombré hair, babylights, bronde, teinture fantasy",
+    "Coiffures de mariée et coiffures pour événements (chignons, tresses, ondulations)",
+    "Soins restructurants professionnels : kératine, botox capillaire, traitement Olaplex",
+    "Accompagnement cheveux colorés, décolorés et abîmés",
+    "Coupes créatives et transformations radicales de look",
+    "Expertise barbe : taille, rasage traditionnel, coloration barbe"
+  ],
+  "produits": [
+    "Wella Professionals — colorations, soins Color Motion et Fusion",
+    "L'Oréal Professionnel — soins Série Expert, coiffants",
+    "Kérastase — soins premium Nutritive, Résistance, Chroma Captive",
+    "Olaplex — traitements restructurants n°0, 1, 2, 3",
+    "Revlon Professional — coiffants et finitions"
+  ],
+  "certifications": [
+    "Partenaire Wella Education depuis 2014",
+    "Salon certifié L'Oréal Professionnel depuis 2017",
+    "Formation Olaplex certifiée (Sophie Durand et Léa Martin)"
+  ],
+  "faq": {
+    "faut_il_reserver": "Oui, nous travaillons uniquement sur rendez-vous. Réservation en ligne ou par téléphone au 01 42 60 74 28.",
+    "devis_gratuit": "Oui, un devis est systématiquement proposé avant toute prestation technique importante.",
+    "carte_fidelite": "Oui ! Après 5 visites, le 6e brushing est offert. Votre carte est enregistrée dès votre première visite.",
+    "bon_cadeau": "Des bons cadeaux sont disponibles pour tous les montants. À demander directement au salon ou par email.",
+    "parking": "Pas de parking privé. Le parking public Victoires (19 rue Étienne Marcel) est à 250 m du salon.",
+    "animaux": "Les animaux de compagnie ne sont pas admis dans le salon.",
+    "extensions": "Nous ne proposons pas d'extensions de cheveux pour l'instant. Nous pouvons vous orienter vers des adresses partenaires.",
+    "permanente": "Oui, nous réalisons des permanentes. Un diagnostic capillaire est obligatoire au préalable pour les cheveux déjà colorés ou fragilisés.",
+    "lissage": "Oui, nous proposons le lissage brésilien (kératine). Résultat durable 3 à 5 mois. Durée : environ 2h30.",
+    "prix_moyen": "Nos tarifs vont de 12 € (coupe de frange) à 250 € (forfait mariée). Une coupe femme débute à 48 €, un balayage mi-long à 110 €.",
+    "wifi": "Oui, le WiFi est disponible pour nos clients.",
+    "boissons": "Café, thé et eau sont offerts à chaque rendez-vous."
+  },
+  "ambiance": {
+    "description": "Salon lumineux et chaleureux de 80 m², situé au rez-de-chaussée dans une belle Haussmannienne du 2e arrondissement. Décoration épurée, fond musical soul et jazz, ambiance détendue.",
+    "capacite_postes": 6,
+    "bacs_shampoing": 3,
+    "casques_soin": 2,
+    "postes_coloration": 3
+  }
+}

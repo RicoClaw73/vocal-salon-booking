@@ -282,15 +282,6 @@ async def twilio_gather(
     (no SpeechResult → prompt to repeat).  Runs the voice pipeline and
     returns a new TwiML response.
     """
-    from app.routers.voice import (
-        FALLBACK_CONFIDENCE_THRESHOLD,
-        MAX_CONSECUTIVE_FALLBACKS,
-        _FALLBACK_RESPONSES,
-        _HUMAN_TRANSFER_MSG,
-        _INTENT_HANDLERS,
-        _merge_entities_to_draft,
-    )
-
     params = dict(await request.form())
     await _verify_signature(request, params)
 
@@ -340,47 +331,82 @@ async def twilio_gather(
 
     state.increment_turn()
 
-    # Intent extraction
-    intent_result = await extract_intent_async(user_text)
-    intent = intent_result.intent
-    confidence = intent_result.confidence
-    entities = intent_result.entities
+    # ── Conversation engine ───────────────────────────────────
+    from app.llm_conversation import is_available as llm_is_available
+    from app.llm_conversation import llm_turn as llm_turn_fn
 
-    # Fallback handling
-    has_active_intent = (
-        state.current_intent is not None
-        and state.current_intent != VoiceIntent.unknown
-    )
     is_fallback = False
     action_taken = "none"
     data = None
+    intent_str = VoiceIntent.unknown.value
+    confidence = 0.0
 
-    if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) \
-            and not has_active_intent:
-        is_fallback = True
-        consecutive = getattr(state, "_consecutive_fallbacks", 0) + 1
-        state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
+    _llm_ok = False
+    if llm_is_available():
+        try:
+            response_text, new_messages, action_taken = await llm_turn_fn(
+                state.messages, user_text, db
+            )
+            state.messages = new_messages
+            action_taken = action_taken or "llm_response"
+            # Detect natural farewell → hang up gracefully
+            _FAREWELL = ("au revoir", "bonne journée", "bonsoir", "à bientôt", "merci, au revoir")
+            if any(kw in response_text.lower() for kw in _FAREWELL):
+                action_taken = "session_ended"
+            intent_str = "llm_driven"
+            confidence = 1.0
+            _llm_ok = True
+        except Exception as exc:
+            logger.error("llm_turn failed, falling back to legacy pipeline: %s", exc)
 
-        if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
-            response_text = _HUMAN_TRANSFER_MSG
-            action_taken = "human_transfer_offered"
+    if not _llm_ok:
+        # Legacy intent → handler pipeline (fallback when LLM not configured or fails)
+        from app.routers.voice import (
+            FALLBACK_CONFIDENCE_THRESHOLD,
+            MAX_CONSECUTIVE_FALLBACKS,
+            _FALLBACK_RESPONSES,
+            _HUMAN_TRANSFER_MSG,
+            _INTENT_HANDLERS,
+            _merge_entities_to_draft,
+        )
+
+        intent_result = await extract_intent_async(user_text)
+        intent = intent_result.intent
+        confidence = intent_result.confidence
+        entities = intent_result.entities
+        intent_str = intent.value
+
+        has_active_intent = (
+            state.current_intent is not None
+            and state.current_intent != VoiceIntent.unknown
+        )
+
+        if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) \
+                and not has_active_intent:
+            is_fallback = True
+            consecutive = getattr(state, "_consecutive_fallbacks", 0) + 1
+            state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
+
+            if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
+                response_text = _HUMAN_TRANSFER_MSG
+                action_taken = "human_transfer_offered"
+            else:
+                idx = (consecutive - 1) % len(_FALLBACK_RESPONSES)
+                response_text = _FALLBACK_RESPONSES[idx]
+                action_taken = "fallback"
+
+            metrics.inc("voice_fallbacks")
         else:
-            idx = (consecutive - 1) % len(_FALLBACK_RESPONSES)
-            response_text = _FALLBACK_RESPONSES[idx]
-            action_taken = "fallback"
+            state._consecutive_fallbacks = 0  # type: ignore[attr-defined]
+            if intent != VoiceIntent.unknown:
+                state.current_intent = intent
+            _merge_entities_to_draft(state, entities)
 
-        metrics.inc("voice_fallbacks")
-    else:
-        state._consecutive_fallbacks = 0  # type: ignore[attr-defined]
-        if intent != VoiceIntent.unknown:
-            state.current_intent = intent
-        _merge_entities_to_draft(state, entities)
-
-        handler = _INTENT_HANDLERS.get(state.current_intent or VoiceIntent.unknown)
-        if handler is None:
-            from app.routers.voice import _handle_unknown
-            handler = _handle_unknown
-        response_text, action_taken, data = await handler(state, entities, db)
+            handler = _INTENT_HANDLERS.get(state.current_intent or VoiceIntent.unknown)
+            if handler is None:
+                from app.routers.voice import _handle_unknown
+                handler = _handle_unknown
+            response_text, action_taken, data = await handler(state, entities, db)
 
     # Persist
     conversation_manager._sessions[call_sid] = state
@@ -390,7 +416,7 @@ async def twilio_gather(
         session_id=call_sid,
         turn_number=state.turns,
         user_text=user_text,
-        intent=(state.current_intent or VoiceIntent.unknown).value,
+        intent=intent_str,
         confidence=confidence,
         response_text=response_text,
         action_taken=action_taken,

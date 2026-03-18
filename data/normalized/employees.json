@@ -1,8 +1,8 @@
 {
   "_meta": {
-    "version": "1.0.0",
+    "version": "2.0.0",
     "salon": "Maison Éclat",
-    "notes": "5 profils fictifs. Compétences alignées sur le catalogue services.json. Horaires type semaine parisienne (mardi-samedi, fermé dimanche-lundi)."
+    "notes": "5 profils fictifs. Compétences alignées sur le catalogue services.json v2. Horaires type semaine parisienne (mardi-samedi, fermé dimanche-lundi)."
   },
   "employees": [
     {
@@ -13,10 +13,15 @@
       "anciennete_ans": 14,
       "competences": [
         "coupe_femme_court", "coupe_femme_mi_long", "coupe_femme_long",
-        "coupe_transformation", "couleur_complete_court", "couleur_complete_mi_long", "couleur_complete_long",
+        "coupe_transformation", "frange",
+        "couleur_complete_court", "couleur_complete_mi_long", "couleur_complete_long",
+        "retouche_racines_court", "retouche_racines_mi_long", "retouche_racines_long",
         "balayage_court", "balayage_mi_long", "balayage_long",
         "meches_court", "meches_mi_long", "meches_long",
-        "decoloration", "chignon", "forfait_mariage",
+        "decoloration",
+        "permanente_court", "permanente_mi_long", "permanente_long",
+        "lissage_bresilien",
+        "chignon", "forfait_mariage",
         "brushing_court", "brushing_mi_long", "brushing_long",
         "soin_keratine", "soin_botox", "soin_profond", "soin_express",
         "forfait_couleur_coupe_court", "forfait_couleur_coupe_mi_long", "forfait_couleur_coupe_long",
@@ -30,7 +35,13 @@
         "vendredi": {"debut": "09:00", "fin": "19:00", "pause": {"debut": "13:00", "fin": "14:00"}},
         "samedi":   {"debut": "09:00", "fin": "18:00", "pause": null}
       },
-      "notes": "Spécialiste balayage et coloration créative. Gère les prestations mariée. Peut former les juniors."
+      "specialites": [
+        "Balayage et coloration créative (ombré hair, babylights, bronde)",
+        "Coiffures de mariée et coiffures événementielles",
+        "Coupes transformation et relooking complet",
+        "Soins restructurants Olaplex (certifiée)"
+      ],
+      "notes": "Directrice artistique du salon. Spécialiste balayage et coloration créative. Référente coiffures mariée. Peut former les juniors. Certifiée Olaplex et Wella Education."
     },
     {
       "id": "emp_02",
@@ -42,9 +53,11 @@
         "coupe_homme", "coupe_femme_court", "coupe_femme_mi_long",
         "coupe_enfant", "frange",
         "couleur_complete_court", "couleur_complete_mi_long",
+        "retouche_racines_court", "retouche_racines_mi_long",
         "couleur_homme", "decoloration",
         "taille_barbe", "rasage_traditionnel", "couleur_barbe",
-        "brushing_court", "brushing_mi_long",
+        "forfait_coupe_barbe",
+        "brushing_court", "brushing_mi_long", "brushing_homme",
         "soin_express", "soin_profond",
         "forfait_couleur_coupe_court", "forfait_couleur_coupe_mi_long"
       ],
@@ -56,7 +69,13 @@
         "vendredi": {"debut": "10:00", "fin": "20:00", "pause": {"debut": "14:00", "fin": "15:00"}},
         "samedi":   {"debut": "09:00", "fin": "18:00", "pause": null}
       },
-      "notes": "Double compétence coiffure mixte + barbier. Référent homme du salon. Pas de balayage/mèches."
+      "specialites": [
+        "Double compétence coiffure mixte et barbier",
+        "Référent homme du salon (coupe, barbe, rasage traditionnel)",
+        "Colorations homme et camouflage cheveux blancs",
+        "Parle français et arabe"
+      ],
+      "notes": "Double compétence coiffure mixte + barbier. Référent homme du salon. Pas de balayage, mèches, permanente ni lissage. Parle français et arabe."
     },
     {
       "id": "emp_03",
@@ -68,9 +87,12 @@
         "coupe_femme_court", "coupe_femme_mi_long", "coupe_femme_long",
         "coupe_enfant", "frange",
         "couleur_complete_court", "couleur_complete_mi_long", "couleur_complete_long",
+        "retouche_racines_court", "retouche_racines_mi_long", "retouche_racines_long",
         "balayage_court", "balayage_mi_long", "balayage_long",
         "meches_court", "meches_mi_long", "meches_long",
         "decoloration",
+        "permanente_court", "permanente_mi_long", "permanente_long",
+        "lissage_bresilien",
         "brushing_court", "brushing_mi_long", "brushing_long",
         "mise_en_plis",
         "soin_express", "soin_profond", "soin_keratine",
@@ -85,7 +107,13 @@
         "vendredi": {"debut": "10:00", "fin": "20:00", "pause": {"debut": "14:00", "fin": "15:00"}},
         "samedi":   {"debut": "09:00", "fin": "18:00", "pause": null}
       },
-      "notes": "Spécialiste couleur. Formation Wella avancée. Référente coloration du salon."
+      "specialites": [
+        "Spécialiste coloration (certifiée Wella avancé)",
+        "Balayage, babylights et techniques de décoloration",
+        "Permanente et lissage brésilien",
+        "Référente coloration du salon"
+      ],
+      "notes": "Spécialiste couleur. Formation Wella avancée. Référente coloration du salon. Certifiée Olaplex (en cours). Pas de forfait mariée ni coupe transformation (niveau confirmé)."
     },
     {
       "id": "emp_04",
@@ -97,7 +125,10 @@
         "coupe_homme", "coupe_femme_court", "coupe_femme_mi_long",
         "coupe_enfant", "frange",
         "couleur_complete_court", "couleur_complete_mi_long",
+        "retouche_racines_court",
+        "forfait_coupe_barbe",
         "brushing_court", "brushing_mi_long", "brushing_long",
+        "brushing_homme",
         "taille_barbe",
         "soin_express", "soin_profond",
         "forfait_couleur_coupe_court"
@@ -110,7 +141,12 @@
         "vendredi": {"debut": "09:00", "fin": "18:00", "pause": {"debut": "12:00", "fin": "13:00"}},
         "samedi":   {"debut": "09:00", "fin": "17:00", "pause": null}
       },
-      "notes": "En montée en compétences. Pas encore habilité balayage/mèches/décoloration. Supervisé par Sophie ou Léa pour colorations complexes."
+      "specialites": [
+        "Coupe homme et coupes classiques",
+        "Colorations simples et retouches racines courts",
+        "Taille de barbe et forfait coupe+barbe"
+      ],
+      "notes": "En montée en compétences. Pas encore habilité pour balayage, mèches, décoloration, permanente, lissage. Supervisé par Sophie ou Léa pour colorations. Pas de coupe transformation ni forfait mariée."
     },
     {
       "id": "emp_05",
@@ -121,6 +157,7 @@
       "competences": [
         "coupe_enfant", "frange",
         "brushing_court", "brushing_mi_long",
+        "brushing_homme",
         "soin_express", "soin_profond",
         "taille_barbe",
         "mise_en_plis"
@@ -133,7 +170,12 @@
         "vendredi": {"debut": "09:00", "fin": "17:00", "pause": {"debut": "12:00", "fin": "13:00"}},
         "samedi":   {"debut": "09:00", "fin": "16:00", "pause": null}
       },
-      "notes": "En alternance (CFA le mercredi). Assiste les seniors : shampoing, préparation couleur, rangement. Peut prendre des coupes enfant et brushings simples en autonomie."
+      "specialites": [
+        "Shampoings, finitions, préparations (assistance aux seniors)",
+        "Brushings simples et mise en plis",
+        "Coupes enfant en autonomie"
+      ],
+      "notes": "En alternance (CFA le mercredi). Assiste les seniors : shampoing, préparation couleur, rangement. Peut prendre des coupes enfant et brushings simples en autonomie. Pas de colorations, coupes adultes complexes, ni prestations techniques."
     }
   ]
 }
