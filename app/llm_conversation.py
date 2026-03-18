@@ -112,7 +112,7 @@ RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Une seule question à la fois. Ne demande pas plusieurs informations en même temps.
 - Utilise toujours check_slots AVANT de demander les informations du client (nom, téléphone).
 - Si check_slots confirme une disponibilité, ALORS demande prénom + nom + numéro de téléphone.
-- Confirme explicitement service, date, heure, coiffeur et nom avant d'appeler create_booking.
+- Avant d'appeler create_booking, confirme explicitement le service, la date ET l'heure réelle du créneau disponible — même si le client a mentionné une heure différente.
 - Si le client mentionne un coiffeur préféré, passe l'employee_id dans check_slots.
 - Ne mentionne JAMAIS les identifiants techniques (service_id, employee_id) au client.
 - Quand tu cites un créneau, mentionne toujours le jour ET l'heure (ex: "mardi 18 mars à 9 heures").
@@ -121,6 +121,9 @@ RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Si le client demande un créneau le matin, passe time_to:"12:00" à check_slots.
 - Si le client demande un créneau l'après-midi, passe time_from:"13:00" à check_slots.
 - check_slots scanne automatiquement jusqu'à 14 jours en avant si aucun créneau ne correspond à la contrainte horaire — tu n'as pas besoin de rappeler l'outil plusieurs fois pour ça.
+- Pour une coloration, un balayage ou des mèches, demande toujours la longueur des cheveux (courts, mi-longs ou longs) AVANT d'appeler check_slots — le prix et la durée varient fortement.
+- Si le client demande un service que tu ne reconnais pas dans le catalogue ci-dessous, ne l'invente pas. Dis-lui que ce service n'est pas proposé et oriente-le vers les prestations proches du catalogue.
+- Quand un outil retourne un message d'erreur ou d'échec, reformule-le toujours de façon naturelle et empathique — ne répète jamais le message brut.
 
 ÉQUIPE (employee_id → profil)
 {_employees_block()}
@@ -442,17 +445,20 @@ async def _exec_create_booking(args: dict, db: AsyncSession) -> str:
 async def _exec_cancel_booking(args: dict, db: AsyncSession) -> str:
     booking_id = args.get("booking_id")
     if not booking_id:
-        return "Numéro de rendez-vous manquant."
+        return "Le numéro de rendez-vous est manquant. Demande-le au client."
 
     booking = await db.get(Booking, int(booking_id))
     if not booking:
-        return f"Rendez-vous #{booking_id} introuvable."
+        return (
+            f"Aucun rendez-vous trouvé avec le numéro {booking_id}. "
+            "Vérifie le numéro avec le client."
+        )
     if booking.status == BookingStatus.cancelled:
-        return f"Le rendez-vous #{booking_id} est déjà annulé."
+        return f"Le rendez-vous numéro {booking_id} a déjà été annulé précédemment."
 
     booking.status = BookingStatus.cancelled
     await db.commit()
-    return f"Rendez-vous #{booking_id} annulé avec succès."
+    return f"Rendez-vous numéro {booking_id} annulé avec succès."
 
 
 async def _exec_reschedule_booking(args: dict, db: AsyncSession) -> str:
@@ -461,7 +467,7 @@ async def _exec_reschedule_booking(args: dict, db: AsyncSession) -> str:
     new_time = args.get("new_time", "")
 
     if not booking_id:
-        return "Numéro de rendez-vous manquant."
+        return "Le numéro de rendez-vous est manquant. Demande-le au client."
 
     result = await db.execute(
         select(Booking)
@@ -471,11 +477,17 @@ async def _exec_reschedule_booking(args: dict, db: AsyncSession) -> str:
     booking = result.scalars().first()
 
     if not booking:
-        return f"Rendez-vous #{booking_id} introuvable."
-    if booking.status != BookingStatus.confirmed:
         return (
-            f"Impossible de déplacer le rendez-vous #{booking_id} "
-            f"(statut : {booking.status.value})."
+            f"Aucun rendez-vous trouvé avec le numéro {booking_id}. "
+            "Vérifie le numéro avec le client."
+        )
+    if booking.status != BookingStatus.confirmed:
+        status_fr = {"cancelled": "annulé", "completed": "terminé", "no_show": "absent"}.get(
+            booking.status.value, booking.status.value
+        )
+        return (
+            f"Le rendez-vous numéro {booking_id} ne peut pas être déplacé "
+            f"car il est {status_fr}."
         )
 
     try:
