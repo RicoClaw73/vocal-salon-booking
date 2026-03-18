@@ -55,7 +55,7 @@
           "id": "coupe_enfant",
           "label": "Coupe enfant (moins de 12 ans)",
           "description": "Shampoing, coupe, séchage — enfants accompagnés uniquement",
-          "prix_eur": 22,
+          "prix_eur": 20.0,
           "duree_min": 25,
           "genre": "mixte",
           "longueur": "tout",
