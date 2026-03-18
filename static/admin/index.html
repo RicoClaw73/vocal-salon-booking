@@ -33,17 +33,38 @@
     .cal-body   { display: grid; grid-template-columns: 56px repeat(5, 1fr);
                   flex: 1; overflow-y: auto; position: relative; }
 
-    .cal-time-gutter { position: relative; }
-    .cal-hour { height: 60px; border-bottom: 1px solid #f8fafc; position: relative; }
+    .cal-time-gutter { position: relative; background: #fff; }
+    .cal-hour { height: 60px; position: relative; }
     .cal-hour-label {
       position: absolute; right: 8px; top: -9px;
       font-size: 11px; font-weight: 500; color: #94a3b8;
       white-space: nowrap;
     }
 
-    .cal-day-col { position: relative; border-left: 1px solid #f1f5f9; }
+    .cal-day-col { position: relative; border-left: 1px solid #e5e7eb; }
     .cal-day-col.today { background: #f8f9ff; }
-    .cal-day-cell { height: 60px; border-bottom: 1px solid #f8fafc; }
+    /* Full-hour line (solid) + half-hour line (dashed, lighter) */
+    .cal-day-cell {
+      height: 60px;
+      border-bottom: 1px solid #e5e7eb;
+      background-image: linear-gradient(
+        to bottom,
+        transparent 50%,
+        #f3f4f6 50%,
+        #f3f4f6 calc(50% + 1px),
+        transparent calc(50% + 1px)
+      );
+    }
+    /* Gutter hour lines (sync with day cells) */
+    .cal-hour::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+      height: 1px; background: #e5e7eb;
+    }
+    .cal-hour::before {
+      content: ''; position: absolute;
+      top: 50%; left: 0; right: 0;
+      height: 1px; background: #f3f4f6;
+    }
 
     /* ── Appointment cards ───────────────────── */
     .appt {
