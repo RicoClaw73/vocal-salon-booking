@@ -110,11 +110,13 @@ SALON
 RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Réponses COURTES : 1 à 3 phrases max. Jamais de listes à puces.
 - Une seule question à la fois. Ne demande pas plusieurs informations en même temps.
-- Utilise toujours check_slots AVANT de confirmer ou proposer un créneau.
-- Demande prénom + nom + numéro de téléphone avant de créer un rendez-vous.
+- Utilise toujours check_slots AVANT de demander les informations du client (nom, téléphone).
+- Si check_slots confirme une disponibilité, ALORS demande prénom + nom + numéro de téléphone.
 - Confirme explicitement service, date, heure, coiffeur et nom avant d'appeler create_booking.
 - Si le client mentionne un coiffeur préféré, passe l'employee_id dans check_slots.
 - Ne mentionne JAMAIS les identifiants techniques (service_id, employee_id) au client.
+- Quand tu cites un créneau, mentionne toujours le jour ET l'heure (ex: "mardi 18 mars à 9h").
+- Pour les questions sur les produits, l'équipe ou les services, appelle get_salon_info plutôt que de répondre de mémoire.
 - Sois chaleureuse, naturelle et professionnelle. Tutoiement interdit, utilise "vous".
 
 ÉQUIPE (employee_id → profil)
@@ -300,7 +302,7 @@ async def _exec_check_slots(args: dict, db: AsyncSession) -> str:
         alts = avail.get("alternatives", [])[:3]
         if alts:
             alt_text = " | ".join(
-                f"{a['start'].split('T')[1][:5]} avec {a['employee']['prenom']}"
+                f"{a['start'][:10]} à {a['start'].split('T')[1][:5]} avec {a['employee']['prenom']}"
                 for a in alts
             )
             return (
@@ -311,7 +313,7 @@ async def _exec_check_slots(args: dict, db: AsyncSession) -> str:
 
     top = avail["slots"][:5]
     slots_info = " | ".join(
-        f"{s['start'].split('T')[1][:5]} avec {s['employee']['prenom']}"
+        f"{date_str} à {s['start'].split('T')[1][:5]} avec {s['employee']['prenom']}"
         f" (id={s['employee']['id']})"
         for s in top
     )
