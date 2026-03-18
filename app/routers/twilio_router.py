@@ -345,7 +345,9 @@ async def twilio_gather(
     if llm_is_available():
         try:
             response_text, new_messages, action_taken = await llm_turn_fn(
-                state.messages, user_text, db
+                state.messages, user_text, db,
+                client_phone=state.client_phone,
+                client_name=state.client_name,
             )
             state.messages = new_messages
             action_taken = action_taken or "llm_response"

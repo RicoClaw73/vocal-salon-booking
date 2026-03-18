@@ -96,9 +96,25 @@ def _employees_block() -> str:
     return _EMPLOYEES_BLOCK
 
 
-def build_system_prompt(today: str | None = None) -> str:
-    """Build the full system prompt, injecting the current date."""
+def build_system_prompt(
+    today: str | None = None,
+    client_phone: str | None = None,
+    client_name: str | None = None,
+) -> str:
+    """Build the full system prompt, injecting the current date and caller info."""
     today_str = today or date.today().isoformat()
+
+    # Inject caller context if available (captured from Twilio From header)
+    caller_lines = []
+    if client_phone and client_phone.lower() not in ("anonymous", "unknown", ""):
+        caller_lines.append(f"- Numéro appelant (Twilio) : {client_phone} — utilise-le directement pour create_booking, ne le redemande pas.")
+    if client_name:
+        caller_lines.append(f"- Nom détecté (Twilio CallerName) : {client_name}")
+    caller_block = (
+        "\nCONTEXTE APPEL\n" + "\n".join(caller_lines)
+        if caller_lines else ""
+    )
+
     return f"""Tu es Marine, la réceptionniste IA de Maison Éclat, un salon de coiffure haut de gamme parisien.
 
 SALON
@@ -111,7 +127,7 @@ RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Réponses COURTES : 1 à 3 phrases max. Jamais de listes à puces.
 - Une seule question à la fois. Ne demande pas plusieurs informations en même temps.
 - Utilise toujours check_slots AVANT de demander les informations du client (nom, téléphone).
-- Si check_slots confirme une disponibilité, ALORS demande prénom + nom + numéro de téléphone.
+- Si check_slots confirme une disponibilité, demande le prénom et nom du client. Ne demande le numéro de téléphone QUE s'il n'est pas déjà disponible dans le contexte appel ci-dessous.
 - Avant d'appeler create_booking, confirme explicitement le service, la date ET l'heure réelle du créneau disponible — même si le client a mentionné une heure différente.
 - Si le client mentionne un coiffeur préféré, passe l'employee_id dans check_slots.
 - Ne mentionne JAMAIS les identifiants techniques (service_id, employee_id) au client.
@@ -136,7 +152,7 @@ OUTILS
 - create_booking : crée un rendez-vous confirmé (après vérif et collecte des infos client)
 - cancel_booking : annule un rendez-vous existant
 - reschedule_booking : déplace un rendez-vous à une nouvelle date/heure
-- get_salon_info : répond aux questions générales sur le salon"""
+- get_salon_info : répond aux questions générales sur le salon{caller_block}"""
 
 
 # ── Tool definitions ─────────────────────────────────────────
@@ -539,7 +555,12 @@ async def _execute_tool(name: str, args: dict, db: AsyncSession) -> str:
 
 # ── OpenAI client ─────────────────────────────────────────────
 
-async def _call_openai(messages: list[dict], today: str | None = None) -> dict:
+async def _call_openai(
+    messages: list[dict],
+    today: str | None = None,
+    client_phone: str | None = None,
+    client_name: str | None = None,
+) -> dict:
     """
     Make one OpenAI chat completion request with tools enabled.
     Returns the raw assistant message dict from choices[0].message.
@@ -547,7 +568,7 @@ async def _call_openai(messages: list[dict], today: str | None = None) -> dict:
     payload: dict = {
         "model": settings.LLM_MODEL,
         "messages": [
-            {"role": "system", "content": build_system_prompt(today)},
+            {"role": "system", "content": build_system_prompt(today, client_phone, client_name)},
             *messages,
         ],
         "tools": TOOLS,
@@ -585,15 +606,19 @@ async def llm_turn(
     user_text: str,
     db: AsyncSession,
     today: str | None = None,
+    client_phone: str | None = None,
+    client_name: str | None = None,
 ) -> tuple[str, list[dict], str | None]:
     """
     Process one user turn through GPT-4o with function calling.
 
     Args:
-        messages:   Conversation history so far (OpenAI format, no system message).
-        user_text:  Transcribed user utterance.
-        db:         Async DB session for tool execution.
-        today:      ISO date to inject into system prompt (defaults to today).
+        messages:      Conversation history so far (OpenAI format, no system message).
+        user_text:     Transcribed user utterance.
+        db:            Async DB session for tool execution.
+        today:         ISO date to inject into system prompt (defaults to today).
+        client_phone:  Caller's phone number from Twilio (auto-filled in create_booking).
+        client_name:   Caller's name from Twilio CallerName (optional).
 
     Returns:
         (response_text, updated_messages, action_taken)
@@ -608,7 +633,7 @@ async def llm_turn(
     action_taken: str | None = None
 
     for _ in range(MAX_TOOL_ROUNDS):
-        msg = await _call_openai(working, today=today)
+        msg = await _call_openai(working, today=today, client_phone=client_phone, client_name=client_name)
         tool_calls = msg.get("tool_calls")
 
         if not tool_calls:
@@ -650,7 +675,7 @@ async def llm_turn(
     payload_no_tools: dict = {
         "model": settings.LLM_MODEL,
         "messages": [
-            {"role": "system", "content": build_system_prompt(today)},
+            {"role": "system", "content": build_system_prompt(today, client_phone, client_name)},
             *working,
         ],
         "temperature": 0.4,
