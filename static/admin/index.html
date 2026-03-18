@@ -1,852 +1,829 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" class="h-full">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Maison Éclat — Réservations</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maison Éclat · Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            brand: { 50:'#faf5ff', 100:'#f3e8ff', 200:'#e9d5ff',
+                     500:'#a855f7', 600:'#9333ea', 700:'#7e22ce' }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, sans-serif; }
 
-    :root {
-      --gold: #c4973c;
-      --gold-light: #e8c97a;
-      --dark: #111111;
-      --dark2: #1e1e1e;
-      --grey: #6b6b6b;
-      --grey-light: #f0ece6;
-      --border: #e0d8cf;
-      --white: #ffffff;
-      --green: #2d7a4f; --green-bg: #eaf4ee;
-      --red: #c0392b;   --red-bg: #fdf0ee;
-      --px-per-min: 1.4;
-      --start-hour: 9;
-    }
+    /* ── Calendar grid ───────────────────────── */
+    .cal-wrap   { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+    .cal-header { display: grid; grid-template-columns: 56px repeat(5, 1fr);
+                  background: #fff; border-bottom: 1px solid #f1f5f9; flex-shrink: 0; }
+    .cal-body   { display: grid; grid-template-columns: 56px repeat(5, 1fr);
+                  flex: 1; overflow-y: auto; position: relative; }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--grey-light);
-      color: var(--dark);
-      min-height: 100vh;
-    }
-
-    /* ── Header ── */
-    header {
-      background: var(--dark);
-      color: white;
-      padding: 0 24px;
-      height: 56px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-    }
-    .logo-star { color: var(--gold-light); }
-    .header-center {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .btn-week {
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: white;
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      transition: background 0.15s;
+    .cal-time-gutter { position: relative; }
+    .cal-hour { height: 60px; border-bottom: 1px solid #f8fafc; position: relative; }
+    .cal-hour-label {
+      position: absolute; right: 8px; top: -9px;
+      font-size: 11px; font-weight: 500; color: #94a3b8;
       white-space: nowrap;
     }
-    .btn-week:hover { background: rgba(255,255,255,0.16); }
-    .btn-today {
-      background: var(--gold);
-      border: none;
-      color: white;
-      padding: 6px 14px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 600;
-      transition: background 0.15s;
-    }
-    .btn-today:hover { background: #b0882e; }
-    .week-label {
-      color: rgba(255,255,255,0.6);
-      font-size: 13px;
-      min-width: 120px;
-      text-align: center;
-    }
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .view-toggle {
-      display: flex;
-      background: rgba(255,255,255,0.08);
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    .view-btn {
-      background: none;
-      border: none;
-      color: rgba(255,255,255,0.5);
-      padding: 6px 12px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-      transition: all 0.15s;
-    }
-    .view-btn.active { background: rgba(255,255,255,0.15); color: white; }
-    .btn-logout {
-      background: none;
-      border: none;
-      color: rgba(255,255,255,0.35);
-      cursor: pointer;
-      font-size: 12px;
-      padding: 6px 8px;
-    }
-    .btn-logout:hover { color: rgba(255,255,255,0.7); }
 
-    /* ── Subbar ── */
-    .subbar {
-      background: var(--white);
-      border-bottom: 1px solid var(--border);
-      padding: 8px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 12px;
-      color: var(--grey);
+    .cal-day-col { position: relative; border-left: 1px solid #f1f5f9; }
+    .cal-day-col.today { background: #faf5ff; }
+    .cal-day-cell { height: 60px; border-bottom: 1px solid #f8fafc; }
+
+    /* ── Appointment cards ───────────────────── */
+    .appt {
+      position: absolute; left: 3px; right: 3px;
+      border-radius: 7px; padding: 5px 7px;
+      overflow: hidden; cursor: pointer;
+      transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+      border-left-width: 3px; border-left-style: solid;
+      font-size: 11.5px; line-height: 1.35;
+      min-height: 22px;
     }
-    .subbar-count { font-weight: 600; color: var(--dark); }
-    .subbar-refresh { color: var(--gold); font-weight: 500; }
+    .appt:hover { transform: translateY(-1px) scale(1.01);
+                  box-shadow: 0 6px 20px rgba(0,0,0,.14); z-index: 10; filter: brightness(0.97); }
+    .appt-name    { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .appt-service { opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+    .appt-meta    { opacity: .65; font-size: 10.5px; margin-top: 1px; }
 
-    /* ── Calendar view ── */
-    #cal-view { padding: 0; }
-
-    .cal-wrapper {
-      background: var(--white);
-      border-top: none;
+    /* ── Current time line ───────────────────── */
+    .now-line {
+      position: absolute; left: 0; right: 0; height: 2px;
+      background: #ef4444; z-index: 20; pointer-events: none;
+    }
+    .now-line::before {
+      content:''; position: absolute; left: -5px; top: -4px;
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #ef4444;
     }
 
-    /* Day headers */
-    .cal-days-header {
-      display: grid;
-      grid-template-columns: 52px repeat(5, 1fr);
-      border-bottom: 2px solid var(--border);
-      background: var(--white);
-      position: sticky;
-      top: 56px;
-      z-index: 50;
+    /* ── Side panel ──────────────────────────── */
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 380px;
+      background: #fff; z-index: 50;
+      box-shadow: -24px 0 64px rgba(0,0,0,.12);
+      transform: translateX(100%);
+      transition: transform .28s cubic-bezier(.4,0,.2,1);
+      display: flex; flex-direction: column;
     }
-    .cal-day-header {
-      padding: 12px 8px;
-      text-align: center;
-      border-left: 1px solid var(--border);
-    }
-    .cal-day-header:first-child { border-left: none; }
-    .cal-day-name {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--grey);
-    }
-    .cal-day-num {
-      font-size: 22px;
-      font-weight: 300;
-      color: var(--dark);
-      line-height: 1.2;
-      margin-top: 2px;
-    }
-    .cal-day-header.today .cal-day-num {
-      background: var(--gold);
-      color: white;
-      border-radius: 50%;
-      width: 36px;
-      height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 2px auto 0;
-      font-weight: 600;
-      font-size: 16px;
-    }
-    .cal-day-header.closed { opacity: 0.35; }
+    .drawer.open  { transform: translateX(0); }
 
-    /* Time grid */
-    .cal-grid-wrap {
-      display: grid;
-      grid-template-columns: 52px repeat(5, 1fr);
-      overflow-y: auto;
-      max-height: calc(100vh - 160px);
+    .backdrop {
+      position: fixed; inset: 0; background: rgba(15,23,42,.35);
+      backdrop-filter: blur(3px);
+      z-index: 40; opacity: 0; pointer-events: none;
+      transition: opacity .28s ease;
     }
+    .backdrop.show { opacity: 1; pointer-events: all; }
 
-    /* Time labels */
-    .cal-times {
-      padding-top: 0;
+    /* ── Employee chips ──────────────────────── */
+    .chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 11px; border-radius: 20px; font-size: 12.5px;
+      font-weight: 500; cursor: pointer; user-select: none;
+      transition: all .15s ease; border: 1.5px solid #e2e8f0;
+      background: #f8fafc; white-space: nowrap;
     }
-    .cal-time-slot {
-      height: calc(60px * var(--px-per-min) * 1);
-      display: flex;
-      align-items: flex-start;
-      justify-content: flex-end;
-      padding: 0 8px 0 0;
-      color: var(--grey);
-      font-size: 11px;
-      font-weight: 500;
-      transform: translateY(-6px);
-    }
+    .chip.off { opacity: .35; background: transparent; }
 
-    /* Day columns */
-    .cal-day-col {
-      border-left: 1px solid var(--border);
-      position: relative;
-      min-height: calc(60 * 11 * var(--px-per-min) * 1px);
+    /* ── Toast ───────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 28px; left: 50%; z-index: 100;
+      transform: translateX(-50%) translateY(90px);
+      background: #0f172a; color: #fff;
+      padding: 11px 20px; border-radius: 12px;
+      font-size: 13.5px; font-weight: 500;
+      box-shadow: 0 8px 30px rgba(0,0,0,.25);
+      transition: transform .28s cubic-bezier(.4,0,.2,1);
+      white-space: nowrap;
     }
-    .cal-day-col.closed { background: repeating-linear-gradient(
-      45deg, transparent, transparent 8px,
-      rgba(0,0,0,0.015) 8px, rgba(0,0,0,0.015) 16px
-    ); }
+    .toast.up { transform: translateX(-50%) translateY(0); }
 
-    /* Hour lines */
-    .cal-hour-line {
-      position: absolute;
-      left: 0; right: 0;
-      border-top: 1px solid var(--border);
-      pointer-events: none;
-    }
-    .cal-hour-line.half {
-      border-top: 1px dashed rgba(0,0,0,0.06);
-    }
+    /* ── Scrollbar ───────────────────────────── */
+    .scroll::-webkit-scrollbar { width: 5px; }
+    .scroll::-webkit-scrollbar-track { background: transparent; }
+    .scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 
-    /* Appointment blocks */
-    .appt-block {
-      position: absolute;
-      left: 3px;
-      border-radius: 6px;
-      padding: 4px 7px;
-      cursor: pointer;
-      overflow: hidden;
-      transition: filter 0.15s, transform 0.1s;
-      border-left: 3px solid;
-      font-size: 11px;
-      line-height: 1.3;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    .appt-block:hover { filter: brightness(0.95); transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
-    .appt-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .appt-service { opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .appt-time-label { opacity: 0.6; font-size: 10px; }
+    /* ── Pulse dot ───────────────────────────── */
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .live-dot { animation: pulse 2s ease-in-out infinite; }
 
-    /* Employee colors */
-    .emp-sophie  { background: #f0ecfb; border-color: #8b7cc8; color: #4a3d7a; }
-    .emp-karim   { background: #e8f5f3; border-color: #3a9b8e; color: #1e5c53; }
-    .emp-lea     { background: #fdf0ee; border-color: #e06b5a; color: #8b2d20; }
-    .emp-hugo    { background: #eef2fc; border-color: #4a7ed4; color: #1e3d7a; }
-    .emp-amira   { background: #eef7ee; border-color: #4da860; color: #1e5c28; }
-    .emp-default { background: #fdf7ee; border-color: var(--gold); color: #6b4a10; }
+    /* ── Login ───────────────────────────────── */
+    .login-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
 
-    /* ── List view ── */
-    #list-view { display: none; padding: 20px 24px; }
-
-    .list-table-wrap {
-      background: var(--white);
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    /* ── List view ───────────────────────────── */
+    .list-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 13px 16px; cursor: pointer;
+      transition: background .1s;
     }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    thead th {
-      background: var(--dark2);
-      color: rgba(255,255,255,0.6);
-      text-align: left;
-      padding: 10px 14px;
-      font-weight: 500;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    tbody tr { border-bottom: 1px solid var(--border); }
-    tbody tr:last-child { border-bottom: none; }
-    tbody tr:hover { background: #faf8f5; }
-    td { padding: 12px 14px; vertical-align: middle; }
-    .td-date .date-day { font-weight: 700; font-size: 14px; }
-    .td-date .date-time { color: var(--gold); font-weight: 600; }
-    .emp-dot {
-      display: inline-block;
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      margin-right: 6px;
-      flex-shrink: 0;
-    }
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-    }
-    .badge-confirmed { background: var(--green-bg); color: var(--green); }
-    .badge-completed { background: #eef2fc; color: #2d4d9b; }
-
-    .btn-cancel {
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--red);
-      padding: 4px 10px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 11px;
-      transition: all 0.15s;
-    }
-    .btn-cancel:hover { background: var(--red-bg); border-color: var(--red); }
-
-    /* ── Detail modal ── */
-    .modal-bg {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.45);
-      z-index: 200;
-      align-items: flex-end;
-      justify-content: center;
-    }
-    .modal-bg.open { display: flex; }
-    .modal {
-      background: white;
-      border-radius: 16px 16px 0 0;
-      padding: 24px;
-      width: 100%;
-      max-width: 480px;
-      animation: slideUp 0.2s ease;
-    }
-    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } }
-    .modal-handle {
-      width: 36px; height: 4px;
-      background: var(--border);
-      border-radius: 2px;
-      margin: 0 auto 20px;
-    }
-    .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
-    .modal-row {
-      display: flex;
-      gap: 12px;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 14px;
-    }
-    .modal-row:last-of-type { border-bottom: none; }
-    .modal-label { color: var(--grey); min-width: 90px; }
-    .modal-value { font-weight: 500; }
-    .modal-actions { margin-top: 20px; display: flex; gap: 10px; }
-    .btn-modal-cancel {
-      flex: 1;
-      padding: 12px;
-      background: var(--red-bg);
-      color: var(--red);
-      border: 1px solid #f0c0bb;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 600;
-      transition: background 0.15s;
-    }
-    .btn-modal-cancel:hover { background: #fae0dc; }
-    .btn-modal-close {
-      flex: 1;
-      padding: 12px;
-      background: var(--dark);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 600;
-    }
-
-    /* ── Empty/Login ── */
-    .state-msg {
-      text-align: center;
-      padding: 80px 20px;
-      color: var(--grey);
-    }
-    .state-msg .icon { font-size: 40px; margin-bottom: 12px; }
-
-    #login-screen {
-      display: none;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      background: var(--dark);
-    }
-    .login-box {
-      background: white;
-      border-radius: 16px;
-      padding: 44px 40px;
-      width: 100%;
-      max-width: 360px;
-      text-align: center;
-    }
-    .login-logo { font-size: 24px; font-weight: 700; letter-spacing: 0.03em; margin-bottom: 4px; }
-    .login-logo span { color: var(--gold); }
-    .login-sub { color: var(--grey); font-size: 14px; margin-bottom: 32px; }
-    .login-input {
-      width: 100%; padding: 12px 14px;
-      border: 1.5px solid var(--border);
-      border-radius: 8px; font-size: 15px;
-      outline: none; margin-bottom: 10px;
-      transition: border-color 0.15s;
-    }
-    .login-input:focus { border-color: var(--gold); }
-    .login-btn {
-      width: 100%; padding: 13px;
-      background: var(--dark); color: white;
-      border: none; border-radius: 8px;
-      font-size: 15px; font-weight: 600;
-      cursor: pointer;
-    }
-    .login-btn:hover { background: #333; }
-    .login-error { color: var(--red); font-size: 13px; margin-top: 10px; display: none; }
-
-    /* ── Legend ── */
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      padding: 10px 24px;
-      background: var(--white);
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-    }
-    .legend-item { display: flex; align-items: center; gap: 5px; }
-
-    /* ── Responsive ── */
-    @media (max-width: 700px) {
-      #cal-view { display: none !important; }
-      #list-view { display: block !important; padding: 12px; }
-      .header-center { display: none; }
-      .view-toggle { display: none; }
-      .cal-days-header { display: none; }
-    }
+    .list-row:hover { background: #f8fafc; }
   </style>
 </head>
-<body>
 
-<!-- Login -->
-<div id="login-screen">
-  <div class="login-box">
-    <div class="login-logo"><span>✦</span> Maison Éclat</div>
-    <div class="login-sub">Accès réservé au gérant</div>
-    <input class="login-input" id="token-input" type="password" placeholder="Code d'accès" autocomplete="current-password">
-    <button class="login-btn" onclick="doLogin()">Accéder</button>
-    <div class="login-error" id="login-error">Code incorrect.</div>
+<body class="h-full bg-slate-50 text-slate-900 antialiased">
+
+<!-- ═══════════════════════════════════════════════════
+     LOGIN
+═══════════════════════════════════════════════════ -->
+<div id="loginScreen"
+     class="hidden fixed inset-0 login-bg flex items-center justify-center z-50">
+  <div class="bg-white rounded-2xl p-8 w-full max-w-sm mx-4 shadow-2xl">
+    <div class="text-center mb-8">
+      <div class="w-16 h-16 bg-brand-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <svg class="w-8 h-8 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M10 10L4 4m6 6l-2.879-2.879M11.121 5.879A3 3 0 1 0 5.879 11.12M17.122 13.879a3 3 0 1 0-5.243 5.242"/>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900">Maison Éclat</h1>
+      <p class="text-slate-400 text-sm mt-1">Tableau de bord · accès réservé</p>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1.5">Token d'accès</label>
+        <input id="tokenInput" type="password" placeholder="••••••••••••"
+               class="w-full px-4 py-2.5 border border-slate-200 rounded-xl
+                      focus:outline-none focus:ring-2 focus:ring-brand-500
+                      focus:border-transparent text-sm transition"
+               onkeydown="if(event.key==='Enter') doLogin()" />
+      </div>
+      <button onclick="doLogin()"
+              class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold
+                     py-2.5 rounded-xl transition text-sm">
+        Accéder
+      </button>
+    </div>
+    <p id="loginError" class="hidden text-red-500 text-sm text-center mt-3"></p>
   </div>
 </div>
 
-<!-- Dashboard -->
-<div id="dashboard" style="display:none">
+<!-- ═══════════════════════════════════════════════════
+     APP
+═══════════════════════════════════════════════════ -->
+<div id="app" class="hidden flex-col h-screen">
 
-  <header>
-    <div class="logo"><span class="logo-star">✦</span> Maison Éclat</div>
-    <div class="header-center">
-      <button class="btn-week" onclick="moveWeek(-1)">&#8249;</button>
-      <button class="btn-today" onclick="goToday()">Aujourd'hui</button>
-      <span class="week-label" id="week-label"></span>
-      <button class="btn-week" onclick="moveWeek(1)">&#8250;</button>
+  <!-- ── Header ─────────────────────────────── -->
+  <header class="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 flex-shrink-0 z-30">
+
+    <!-- Logo -->
+    <div class="flex items-center gap-2.5 flex-shrink-0">
+      <div class="w-9 h-9 bg-brand-600 rounded-xl flex items-center justify-center
+                  text-white text-xs font-bold tracking-tight shadow-sm">ME</div>
+      <span class="font-semibold text-slate-800 hidden sm:block text-[15px]">Maison Éclat</span>
     </div>
-    <div class="header-right">
-      <div class="view-toggle">
-        <button class="view-btn active" id="btn-cal" onclick="setView('cal')">Calendrier</button>
-        <button class="view-btn" id="btn-list" onclick="setView('list')">Liste</button>
-      </div>
-      <button class="btn-logout" onclick="logout()">✕</button>
+
+    <!-- Separator -->
+    <div class="w-px h-6 bg-slate-100 hidden sm:block"></div>
+
+    <!-- Week nav -->
+    <div class="flex items-center gap-0.5">
+      <button onclick="changeWeek(-1)"
+              class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center
+                     justify-center text-slate-500 transition"
+              title="Semaine précédente">
+        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+      </button>
+      <button onclick="goToToday()"
+              class="px-3 h-8 text-sm font-medium text-slate-700
+                     hover:bg-slate-100 rounded-lg transition"
+              id="weekLabel">17–21 mar</button>
+      <button onclick="changeWeek(1)"
+              class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center
+                     justify-center text-slate-500 transition"
+              title="Semaine suivante">
+        <i data-lucide="chevron-right" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <button onclick="goToToday()"
+            class="px-3 h-8 bg-brand-50 hover:bg-brand-100 text-brand-700
+                   text-sm font-medium rounded-lg transition hidden md:block">
+      Aujourd'hui
+    </button>
+
+    <!-- Spacer -->
+    <div class="flex-1"></div>
+
+    <!-- RDV count -->
+    <div class="hidden md:flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
+      <i data-lucide="calendar" class="w-3.5 h-3.5 text-slate-400"></i>
+      <span id="statCount" class="text-sm font-semibold text-slate-700">—</span>
+      <span class="text-sm text-slate-400">RDV</span>
+    </div>
+
+    <!-- Live indicator + countdown -->
+    <div class="flex items-center gap-1.5 text-xs text-slate-400 flex-shrink-0">
+      <div class="w-2 h-2 bg-emerald-400 rounded-full live-dot"></div>
+      <span class="hidden sm:block">
+        <span id="refreshCountdown">60</span>s
+      </span>
+    </div>
+
+    <!-- View toggle -->
+    <div class="flex items-center bg-slate-100 rounded-lg p-0.5 flex-shrink-0">
+      <button onclick="setView('calendar')" id="btnCal"
+              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
+                     transition flex items-center gap-1.5 text-xs font-medium">
+        <i data-lucide="calendar-days" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:block">Calendrier</span>
+      </button>
+      <button onclick="setView('list')" id="btnList"
+              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
+                     transition flex items-center gap-1.5 text-xs font-medium">
+        <i data-lucide="list" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:block">Liste</span>
+      </button>
     </div>
   </header>
 
-  <div class="subbar">
-    <span><span class="subbar-count" id="booking-count">—</span> rendez-vous à venir</span>
-    <span class="subbar-refresh" id="countdown"></span>
+  <!-- ── Employee filter bar ─────────────────── -->
+  <div id="empBar"
+       class="bg-white border-b border-slate-100 px-4 py-2
+              flex items-center gap-2 overflow-x-auto flex-shrink-0">
+    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider
+                 flex-shrink-0 mr-1">Coiffeurs</span>
   </div>
 
-  <!-- Employee legend -->
-  <div class="legend" id="legend"></div>
-
-  <!-- Calendar view -->
-  <div id="cal-view">
-    <div class="cal-wrapper">
-      <div class="cal-days-header" id="cal-days-header"></div>
-      <div class="cal-grid-wrap" id="cal-grid-wrap"></div>
+  <!-- ── Calendar view ──────────────────────── -->
+  <div id="calView" class="flex-1 overflow-hidden cal-wrap">
+    <div class="cal-header" id="calHeader">
+      <div></div>
+    </div>
+    <div class="cal-body scroll" id="calBody">
+      <div class="cal-time-gutter" id="calGutter"></div>
     </div>
   </div>
 
-  <!-- List view -->
-  <div id="list-view">
-    <div class="list-table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Date</th><th>Client</th><th>Téléphone</th>
-            <th>Prestation</th><th>Durée</th><th>Coiffeur</th><th>Statut</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="list-body"></tbody>
-      </table>
-      <div id="list-empty" class="state-msg" style="display:none">
-        <div class="icon">📅</div>Aucun rendez-vous.
+  <!-- ── List view ──────────────────────────── -->
+  <div id="listView" class="hidden flex-1 overflow-y-auto scroll">
+    <div id="listBody" class="max-w-3xl mx-auto px-4 py-4 pb-24"></div>
+  </div>
+
+</div>
+
+<!-- ── Drawer backdrop ──────────────────────── -->
+<div id="backdrop" class="backdrop" onclick="closeDrawer()"></div>
+
+<!-- ── Drawer ────────────────────────────────── -->
+<div id="drawer" class="drawer">
+  <div class="flex flex-col h-full">
+
+    <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+      <h2 class="font-semibold text-slate-900">Rendez-vous</h2>
+      <button onclick="closeDrawer()"
+              class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center
+                     justify-center transition text-slate-400">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="px-6 pt-5 pb-4 border-b border-slate-50">
+      <div class="flex items-center gap-4">
+        <div id="dAvatar"
+             class="w-14 h-14 rounded-2xl flex items-center justify-center
+                    text-white text-xl font-bold flex-shrink-0"></div>
+        <div>
+          <div id="dClient" class="text-lg font-semibold text-slate-900"></div>
+          <div id="dPhone" class="text-sm text-slate-400 mt-0.5 flex items-center gap-1.5">
+            <i data-lucide="phone" class="w-3.5 h-3.5"></i>
+            <span></span>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
-</div>
+    <div class="flex-1 overflow-y-auto scroll px-6 py-5 space-y-3">
+      <div class="bg-slate-50 rounded-xl p-4 space-y-3.5">
 
-<!-- Detail modal -->
-<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-title" id="modal-title"></div>
-    <div id="modal-rows"></div>
-    <div class="modal-actions">
-      <button class="btn-modal-cancel" id="modal-cancel-btn" onclick="cancelFromModal()">Annuler le RDV</button>
-      <button class="btn-modal-close" onclick="closeModal()">Fermer</button>
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
+            <i data-lucide="scissors" class="w-4 h-4 text-slate-500"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-slate-800" id="dService"></div>
+            <div class="text-xs text-slate-400 mt-0.5" id="dDuration"></div>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
+            <i data-lucide="clock" class="w-4 h-4 text-slate-500"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-slate-800" id="dTime"></div>
+            <div class="text-xs text-slate-400 mt-0.5" id="dDate"></div>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-3">
+          <div id="dEmpDot"
+               class="w-8 h-8 rounded-lg flex items-center justify-center
+                      text-[11px] font-bold text-white flex-shrink-0"></div>
+          <div>
+            <div class="text-sm font-semibold text-slate-800" id="dEmployee"></div>
+            <div class="text-xs text-slate-400 mt-0.5">Coiffeur·se assigné·e</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="flex items-center gap-2 px-1">
+        <div class="w-2 h-2 bg-emerald-400 rounded-full"></div>
+        <span class="text-sm text-slate-500 font-medium">Confirmé</span>
+      </div>
+
+      <div id="dNotesWrap" class="hidden bg-amber-50 border border-amber-100
+                                   rounded-xl p-4 text-sm text-amber-800">
+        <div class="font-semibold text-xs uppercase tracking-wide text-amber-500 mb-1">Note</div>
+        <div id="dNotes"></div>
+      </div>
+    </div>
+
+    <div class="px-6 py-5 border-t border-slate-100">
+      <button onclick="cancelBooking()"
+              class="w-full flex items-center justify-center gap-2 px-4 py-2.5
+                     border border-red-200 text-red-600 hover:bg-red-50
+                     rounded-xl text-sm font-medium transition">
+        <i data-lucide="trash-2" class="w-4 h-4"></i>
+        Annuler le rendez-vous
+      </button>
     </div>
   </div>
 </div>
 
+<!-- ── Toast ──────────────────────────────────── -->
+<div id="toast" class="toast"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════════════════ -->
 <script>
-  // ── Config ───────────────────────────────────────────────────
-  const API = '/api/v1';
-  const START_HOUR = 9;
-  const END_HOUR = 20;
-  const PX_PER_MIN = 1.4;
-  const CLOSED_DAYS = [0, 1]; // Sun, Mon
+// ── Constants ──────────────────────────────────────────────────────
+const CAL_START = 9, CAL_END = 20;
+const PX_PER_MIN = 1.0;
+const MONTHS = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+const DAYS_SHORT = ['lun.','mar.','mer.','jeu.','ven.','sam.','dim.'];
 
-  const EMP_COLORS = {
-    'sophie': 'emp-sophie', 'karim': 'emp-karim',
-    'léa': 'emp-lea', 'lea': 'emp-lea',
-    'hugo': 'emp-hugo', 'amira': 'emp-amira',
-  };
-  const EMP_DOT_COLORS = {
-    'sophie': '#8b7cc8', 'karim': '#3a9b8e',
-    'léa': '#e06b5a', 'lea': '#e06b5a',
-    'hugo': '#4a7ed4', 'amira': '#4da860',
-  };
+const PALETTE = [
+  { bg:'#7c3aed', light:'#f5f3ff', border:'#a78bfa', text:'#5b21b6' },
+  { bg:'#0891b2', light:'#ecfeff', border:'#67e8f9', text:'#0e7490' },
+  { bg:'#e11d48', light:'#fff1f2', border:'#fda4af', text:'#be123c' },
+  { bg:'#4f46e5', light:'#eef2ff', border:'#a5b4fc', text:'#3730a3' },
+  { bg:'#059669', light:'#ecfdf5', border:'#6ee7b7', text:'#047857' },
+  { bg:'#d97706', light:'#fffbeb', border:'#fcd34d', text:'#b45309' },
+];
 
-  // ── State ────────────────────────────────────────────────────
-  let allBookings = [];
-  let currentWeekStart = getWeekStart(new Date());
-  let countdownSec = 60;
-  let countdownTimer = null;
-  let activeModal = null;
+// ── State ──────────────────────────────────────────────────────────
+let token        = localStorage.getItem('admin_token') || '';
+let bookings     = [];
+let weekOffset   = 0;
+let view         = 'calendar';
+let activeEmps   = new Set();
+let empIndex     = {};
+let selectedId   = null;
+let refreshTimer = null;
+let countdown    = 60;
+let nowLineTimer = null;
 
-  // ── Auth ─────────────────────────────────────────────────────
-  const getToken = () => localStorage.getItem('admin_token') || '';
-  const saveToken = t => t ? localStorage.setItem('admin_token', t) : null;
-  const clearToken = () => localStorage.removeItem('admin_token');
+// ── Boot ───────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  lucide.createIcons();
+  buildGutter();
 
-  function logout() { clearToken(); location.reload(); }
+  if (window.innerWidth < 700) setView('list', true);
+  else setView('calendar', true);
 
-  async function doLogin() {
-    const t = document.getElementById('token-input').value.trim();
-    if (t) saveToken(t);
-    const ok = await loadBookings();
-    if (!ok) { clearToken(); document.getElementById('login-error').style.display = 'block'; }
+  loadBookings();
+
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'ArrowLeft')  changeWeek(-1);
+    if (e.key === 'ArrowRight') changeWeek(1);
+    if (e.key === 'Escape')     closeDrawer();
+  });
+});
+
+// ── Auth ───────────────────────────────────────────────────────────
+function doLogin() {
+  const t = document.getElementById('tokenInput').value.trim();
+  if (t) { token = t; localStorage.setItem('admin_token', t); }
+  loadBookings();
+}
+function showLogin() {
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginScreen').classList.add('flex');
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('app').classList.remove('flex');
+}
+function showApp() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('flex');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('app').classList.add('flex');
+}
+
+// ── Data ───────────────────────────────────────────────────────────
+async function loadBookings() {
+  try {
+    const p = new URLSearchParams({ days: 365 });
+    if (token) p.append('token', token);
+    const r = await fetch(`/api/v1/admin/bookings?${p}`);
+    if (r.status === 401) { showLogin(); return; }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    bookings = await r.json();
+    showApp();
+    render();
+    resetCountdown();
+  } catch (err) {
+    console.error(err);
+    showToast('Erreur de chargement', 'error');
   }
-  document.getElementById('token-input').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+}
 
-  // ── Data ─────────────────────────────────────────────────────
-  async function loadBookings() {
-    let url = `${API}/admin/bookings?days=60`;
-    const t = getToken();
-    if (t) url += `&token=${encodeURIComponent(t)}`;
-    try {
-      const r = await fetch(url);
-      if (r.status === 401) return false;
-      if (!r.ok) throw new Error();
-      allBookings = await r.json();
-      render();
-      show('dashboard'); hide('login-screen');
-      resetCountdown();
-      return true;
-    } catch { return false; }
+// ── Week helpers ───────────────────────────────────────────────────
+function weekDates() {
+  const base = new Date();
+  base.setDate(base.getDate() + weekOffset * 7);
+  const dow = base.getDay();
+  const diffToTue = dow === 0 ? -5 : (2 - dow);
+  const tue = new Date(base);
+  tue.setDate(base.getDate() + diffToTue);
+  tue.setHours(0, 0, 0, 0);
+  return Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(tue); d.setDate(tue.getDate() + i); return d;
+  });
+}
+function weekLabel() {
+  const [d0, d4] = [weekDates()[0], weekDates()[4]];
+  if (d0.getMonth() === d4.getMonth())
+    return `${d0.getDate()}–${d4.getDate()} ${MONTHS[d0.getMonth()]}`;
+  return `${d0.getDate()} ${MONTHS[d0.getMonth()]} – ${d4.getDate()} ${MONTHS[d4.getMonth()]}`;
+}
+function weekBookings() {
+  const [start, end] = [weekDates()[0], new Date(weekDates()[4])];
+  end.setHours(23, 59, 59, 999);
+  return bookings.filter(b => { const t = new Date(b.start_time); return t >= start && t <= end; });
+}
+
+// ── Employee colours ───────────────────────────────────────────────
+function empColor(name) {
+  if (!(name in empIndex)) empIndex[name] = Object.keys(empIndex).length % PALETTE.length;
+  return PALETTE[empIndex[name]];
+}
+function initials(name) {
+  if (!name) return '?';
+  const p = name.trim().split(' ');
+  return p.length >= 2 ? (p[0][0] + p[p.length-1][0]).toUpperCase() : name[0].toUpperCase();
+}
+
+// ── Render ─────────────────────────────────────────────────────────
+function render() {
+  bookings.forEach(b => empColor(b.employee_name || ''));
+  document.getElementById('weekLabel').textContent = weekLabel();
+  document.getElementById('statCount').textContent = weekBookings().length;
+  buildEmpBar();
+  if (view === 'calendar') renderCalendar();
+  else renderList();
+}
+
+// ── Employee filter bar ────────────────────────────────────────────
+function buildEmpBar() {
+  const names = [...new Set(bookings.map(b => b.employee_name).filter(Boolean))].sort();
+  if (activeEmps.size === 0) names.forEach(n => activeEmps.add(n));
+
+  const bar = document.getElementById('empBar');
+  bar.innerHTML = '<span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex-shrink-0 mr-1">Coiffeurs</span>';
+
+  const allOn = activeEmps.size === names.length;
+  const allChip = document.createElement('button');
+  allChip.className = `chip${allOn ? '' : ' off'}`;
+  allChip.textContent = 'Tous';
+  allChip.onclick = () => { allOn ? activeEmps.clear() : names.forEach(n => activeEmps.add(n)); render(); };
+  bar.appendChild(allChip);
+
+  names.forEach(name => {
+    const c = empColor(name);
+    const on = activeEmps.has(name);
+    const chip = document.createElement('button');
+    chip.className = `chip${on ? '' : ' off'}`;
+    chip.innerHTML = `<span style="width:9px;height:9px;border-radius:50%;background:${c.bg};flex-shrink:0;display:inline-block"></span><span>${name.split(' ')[0]}</span>`;
+    chip.onclick = () => { on ? activeEmps.delete(name) : activeEmps.add(name); render(); };
+    bar.appendChild(chip);
+  });
+}
+
+// ── Calendar ───────────────────────────────────────────────────────
+function buildGutter() {
+  const g = document.getElementById('calGutter');
+  g.innerHTML = '';
+  for (let h = CAL_START; h <= CAL_END; h++) {
+    const row = document.createElement('div');
+    row.className = 'cal-hour';
+    if (h < CAL_END) {
+      const lbl = document.createElement('span');
+      lbl.className = 'cal-hour-label';
+      lbl.textContent = `${h}h`;
+      row.appendChild(lbl);
+    }
+    g.appendChild(row);
   }
+}
 
-  // ── Render ───────────────────────────────────────────────────
-  function render() {
-    const count = allBookings.length;
-    document.getElementById('booking-count').textContent = count === 1 ? '1' : count;
-    renderLegend();
-    renderCalendar();
-    renderList();
-  }
+function renderCalendar() {
+  const dates   = weekDates();
+  const today   = new Date(); today.setHours(0,0,0,0);
+  const visible = weekBookings().filter(b => activeEmps.has(b.employee_name));
 
-  function renderLegend() {
-    const employees = [...new Set(allBookings.map(b => b.employee_name))].sort();
-    const lg = document.getElementById('legend');
-    lg.innerHTML = employees.map(name => {
-      const key = name.split(' ')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const color = EMP_DOT_COLORS[key] || EMP_DOT_COLORS[name.toLowerCase()] || '#b8966a';
-      return `<div class="legend-item"><span class="emp-dot" style="background:${color}"></span>${esc(name)}</div>`;
-    }).join('');
-  }
+  // Day headers
+  const hdr = document.getElementById('calHeader');
+  hdr.innerHTML = '<div></div>';
+  dates.forEach((d, i) => {
+    const isToday = d.getTime() === today.getTime();
+    const col = document.createElement('div');
+    col.className = 'text-center py-2.5';
+    col.innerHTML = `
+      <div class="text-[11px] font-semibold uppercase tracking-wide ${isToday ? 'text-brand-600' : 'text-slate-400'}">${DAYS_SHORT[i+1]}</div>
+      <div class="w-9 h-9 mx-auto mt-1 flex items-center justify-center rounded-full text-[17px] font-semibold ${isToday ? 'bg-brand-600 text-white' : 'text-slate-700'}">${d.getDate()}</div>`;
+    hdr.appendChild(col);
+  });
 
-  // ── Calendar ─────────────────────────────────────────────────
-  function getWeekStart(d) {
-    const date = new Date(d);
-    const day = date.getDay(); // 0=Sun
-    // Start on Tuesday (day 2): offset = (day - 2 + 7) % 7
-    const offset = (day - 2 + 7) % 7;
-    date.setDate(date.getDate() - offset);
-    date.setHours(0, 0, 0, 0);
-    return date;
-  }
+  // Remove old day cols
+  const body = document.getElementById('calBody');
+  [...body.children].forEach(c => { if (c.id !== 'calGutter') c.remove(); });
 
-  function moveWeek(dir) {
-    currentWeekStart.setDate(currentWeekStart.getDate() + dir * 7);
-    renderCalendar();
-  }
+  dates.forEach(date => {
+    const dateStr = date.toISOString().slice(0, 10);
+    const isToday = date.getTime() === today.getTime();
+    const dayBkgs = visible.filter(b => b.start_time.slice(0, 10) === dateStr);
 
-  function goToday() {
-    currentWeekStart = getWeekStart(new Date());
-    renderCalendar();
-  }
+    const col = document.createElement('div');
+    col.className = `cal-day-col${isToday ? ' today' : ''}`;
+    col.style.minHeight = `${(CAL_END - CAL_START + 1) * 60}px`;
 
-  function renderCalendar() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // 5 days: Tue–Sat
-    const days = [];
-    for (let i = 0; i < 5; i++) {
-      const d = new Date(currentWeekStart);
-      d.setDate(d.getDate() + i);
-      days.push(d);
+    for (let h = CAL_START; h <= CAL_END; h++) {
+      const cell = document.createElement('div');
+      cell.className = 'cal-day-cell';
+      col.appendChild(cell);
     }
 
-    // Week label
-    const months = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
-    const first = days[0], last = days[4];
-    document.getElementById('week-label').textContent =
-      first.getMonth() === last.getMonth()
-        ? `${first.getDate()}–${last.getDate()} ${months[first.getMonth()]}`
-        : `${first.getDate()} ${months[first.getMonth()]} – ${last.getDate()} ${months[last.getMonth()]}`;
-
-    // Day headers
-    const dayNames = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
-    const hdr = document.getElementById('cal-days-header');
-    hdr.innerHTML = '<div></div>' + days.map(d => {
-      const isToday = d.getTime() === today.getTime();
-      const closed = CLOSED_DAYS.includes(d.getDay());
-      return `<div class="cal-day-header${isToday ? ' today' : ''}${closed ? ' closed' : ''}">
-        <div class="cal-day-name">${dayNames[d.getDay()]}</div>
-        <div class="cal-day-num">${d.getDate()}</div>
-      </div>`;
-    }).join('');
-
-    // Grid
-    const wrap = document.getElementById('cal-grid-wrap');
-    const totalMins = (END_HOUR - START_HOUR) * 60;
-    const totalPx = totalMins * PX_PER_MIN;
-
-    // Time column
-    let timesHtml = '<div class="cal-times">';
-    for (let h = START_HOUR; h <= END_HOUR; h++) {
-      timesHtml += `<div class="cal-time-slot">${h}h</div>`;
-    }
-    timesHtml += '</div>';
-
-    // Hour lines + appointment columns
-    let linesHtml = '';
-    for (let h = 0; h < (END_HOUR - START_HOUR); h++) {
-      const top = h * 60 * PX_PER_MIN;
-      linesHtml += `<div class="cal-hour-line" style="top:${top}px"></div>`;
-      linesHtml += `<div class="cal-hour-line half" style="top:${top + 30 * PX_PER_MIN}px"></div>`;
+    if (isToday) {
+      const now  = new Date();
+      const mins = (now.getHours() - CAL_START) * 60 + now.getMinutes();
+      if (mins >= 0 && mins <= (CAL_END - CAL_START) * 60) {
+        const line = document.createElement('div');
+        line.className = 'now-line';
+        line.style.top = `${mins * PX_PER_MIN}px`;
+        col.appendChild(line);
+      }
     }
 
-    let gridHtml = timesHtml;
-    days.forEach(d => {
-      const closed = CLOSED_DAYS.includes(d.getDay());
-      const dayStr = d.toISOString().slice(0, 10);
-      const dayAppts = allBookings.filter(b => b.start_time.slice(0, 10) === dayStr);
-
-      // Compute overlapping columns
-      const assigned = assignColumns(dayAppts);
-
-      let apptHtml = assigned.map(({ b, col, totalCols }) => {
-        const start = new Date(b.start_time);
-        const end = new Date(b.end_time);
-        const topPx = ((start.getHours() - START_HOUR) * 60 + start.getMinutes()) * PX_PER_MIN;
-        const heightPx = Math.max(((end - start) / 60000) * PX_PER_MIN, 20);
-        const widthPct = totalCols > 1 ? (95 / totalCols) : 95;
-        const leftPct = col * (95 / totalCols) + 2;
-        const empKey = b.employee_name.split(' ')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const cls = EMP_COLORS[empKey] || 'emp-default';
-
-        return `<div class="appt-block ${cls}"
-          style="top:${topPx}px;height:${heightPx}px;width:${widthPct}%;left:${leftPct}%"
-          onclick='openModal(${JSON.stringify(b)})'>
-          <div class="appt-name">${esc(b.client_name)}</div>
-          ${heightPx > 30 ? `<div class="appt-service">${esc(b.service_label)}</div>` : ''}
-          ${heightPx > 45 ? `<div class="appt-time-label">${fmtTime(b.start_time)} · ${b.employee_name.split(' ')[0]}</div>` : ''}
-        </div>`;
-      }).join('');
-
-      gridHtml += `<div class="cal-day-col${closed ? ' closed' : ''}" style="min-height:${totalPx}px">
-        ${linesHtml}${apptHtml}
-      </div>`;
+    const cols = assignColumns(dayBkgs);
+    dayBkgs.forEach(b => {
+      const colIdx = cols.findIndex(c => c.includes(b.id));
+      col.appendChild(buildCard(b, colIdx, cols.length));
     });
 
-    wrap.innerHTML = gridHtml;
+    body.appendChild(col);
+  });
+
+  clearInterval(nowLineTimer);
+  nowLineTimer = setInterval(() => { if (view === 'calendar') renderCalendar(); }, 60_000);
+
+  lucide.createIcons();
+}
+
+function assignColumns(bkgs) {
+  if (!bkgs.length) return [];
+  const sorted = [...bkgs].sort((a,b) => a.start_time.localeCompare(b.start_time));
+  const cols = [];
+  sorted.forEach(b => {
+    let placed = false;
+    for (let c = 0; c < cols.length; c++) {
+      const lastId = cols[c][cols[c].length - 1];
+      const last   = bkgs.find(x => x.id === lastId);
+      if (!last || new Date(last.end_time) <= new Date(b.start_time)) {
+        cols[c].push(b.id); placed = true; break;
+      }
+    }
+    if (!placed) cols.push([b.id]);
+  });
+  return cols;
+}
+
+function buildCard(b, colIdx, numCols) {
+  const start  = new Date(b.start_time);
+  const end    = new Date(b.end_time);
+  const durMin = Math.round((end - start) / 60000);
+  const startM = (start.getHours() - CAL_START) * 60 + start.getMinutes();
+  const h      = Math.max(22, durMin * PX_PER_MIN);
+  const c      = empColor(b.employee_name || '');
+  const gap    = 3;
+  const w      = numCols > 1 ? `calc(${100/numCols}% - ${gap*2}px)` : `calc(100% - ${gap*2}px)`;
+  const left   = numCols > 1 ? `calc(${colIdx*100/numCols}% + ${gap}px)` : `${gap}px`;
+  const timeStr   = `${start.getHours()}h${String(start.getMinutes()).padStart(2,'0')}`;
+  const firstName = (b.client_name || '—').split(' ')[0];
+  const empFirst  = (b.employee_name || '').split(' ')[0];
+
+  const card = document.createElement('div');
+  card.className = 'appt';
+  card.style.cssText = `top:${startM*PX_PER_MIN}px;height:${h}px;left:${left};width:${w};background:${c.light};border-left-color:${c.bg};color:${c.text};`;
+  card.innerHTML = `<div class="appt-name">${firstName}</div>
+    ${h > 36 ? `<div class="appt-service">${b.service_label || ''}</div>` : ''}
+    ${h > 52 ? `<div class="appt-meta">${timeStr} · ${empFirst}</div>` : ''}`;
+  card.onclick = () => openDrawer(b);
+  return card;
+}
+
+// ── List view ──────────────────────────────────────────────────────
+function renderList() {
+  const dates   = weekDates();
+  const today   = new Date(); today.setHours(0,0,0,0);
+  const visible = weekBookings().filter(b => activeEmps.has(b.employee_name));
+  const body    = document.getElementById('listBody');
+  body.innerHTML = '';
+
+  if (visible.length === 0) {
+    body.innerHTML = `<div class="text-center py-20">
+      <svg class="w-12 h-12 mx-auto mb-3 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      <p class="text-sm font-medium text-slate-400">Aucun rendez-vous cette semaine</p>
+    </div>`;
+    return;
   }
 
-  function assignColumns(appts) {
-    if (!appts.length) return [];
-    const sorted = [...appts].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-    const cols = [];
-    const result = sorted.map(b => {
-      let c = 0;
-      while (cols[c] && new Date(cols[c]) > new Date(b.start_time)) c++;
-      cols[c] = b.end_time;
-      return { b, col: c };
+  dates.forEach(date => {
+    const dateStr = date.toISOString().slice(0, 10);
+    const dayBkgs = visible.filter(b => b.start_time.slice(0, 10) === dateStr)
+                            .sort((a,b) => a.start_time.localeCompare(b.start_time));
+    if (!dayBkgs.length) return;
+
+    const isToday = date.getTime() === today.getTime();
+    const sep = document.createElement('div');
+    sep.className = 'flex items-center gap-3 mt-6 mb-2';
+    sep.innerHTML = `
+      <span class="text-sm font-semibold text-slate-700 capitalize">
+        ${date.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}
+      </span>
+      ${isToday ? '<span class="bg-brand-100 text-brand-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">Aujourd\'hui</span>' : ''}
+      <div class="flex-1 h-px bg-slate-100"></div>
+      <span class="text-xs text-slate-400">${dayBkgs.length} RDV</span>`;
+    body.appendChild(sep);
+
+    const card = document.createElement('div');
+    card.className = 'bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm';
+
+    dayBkgs.forEach((b, i) => {
+      const c       = empColor(b.employee_name || '');
+      const start   = new Date(b.start_time);
+      const end     = new Date(b.end_time);
+      const durMin  = Math.round((end - start) / 60000);
+      const timeStr = `${String(start.getHours()).padStart(2,'0')}h${String(start.getMinutes()).padStart(2,'0')}`;
+
+      const row = document.createElement('div');
+      row.className = `list-row${i > 0 ? ' border-t border-slate-50' : ''}`;
+      row.innerHTML = `
+        <div class="text-sm font-bold text-slate-700 w-12 flex-shrink-0">${timeStr}</div>
+        <div class="w-[3px] h-10 rounded-full flex-shrink-0" style="background:${c.bg}"></div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-semibold text-slate-900 truncate">${b.client_name || '—'}</div>
+          <div class="text-xs text-slate-400 truncate mt-0.5">${b.service_label || ''}</div>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
+               style="background:${c.bg}">${initials(b.employee_name)}</div>
+          <span class="text-xs text-slate-500 hidden sm:block">${(b.employee_name||'').split(' ')[0]}</span>
+        </div>
+        <div class="text-xs text-slate-300 w-12 text-right flex-shrink-0">${durMin}min</div>
+        <svg class="w-4 h-4 text-slate-200 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>`;
+      row.onclick = () => openDrawer(b);
+      card.appendChild(row);
     });
-    const maxCol = Math.max(...result.map(r => r.col)) + 1;
-    return result.map(r => ({ ...r, totalCols: maxCol }));
-  }
+    body.appendChild(card);
+  });
+}
 
-  // ── List ─────────────────────────────────────────────────────
-  function renderList() {
-    const tbody = document.getElementById('list-body');
-    const empty = document.getElementById('list-empty');
-    if (!allBookings.length) {
-      tbody.innerHTML = '';
-      empty.style.display = 'block';
-      return;
-    }
-    empty.style.display = 'none';
-    tbody.innerHTML = allBookings.map(b => {
-      const empKey = b.employee_name.split(' ')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const dot = EMP_DOT_COLORS[empKey] || '#b8966a';
-      return `<tr id="row-${b.id}">
-        <td class="td-date">
-          <div class="date-day">${fmtDate(b.start_time)}</div>
-          <div class="date-time">${fmtTime(b.start_time)}</div>
-        </td>
-        <td><strong>${esc(b.client_name)}</strong></td>
-        <td style="color:var(--grey)">${b.client_phone ? esc(b.client_phone) : '—'}</td>
-        <td>${esc(b.service_label)}</td>
-        <td style="color:var(--grey)">${fmtDur(b.start_time, b.end_time)}</td>
-        <td><span class="emp-dot" style="background:${dot}"></span>${esc(b.employee_name)}</td>
-        <td><span class="badge badge-${b.status}">${b.status === 'confirmed' ? 'Confirmé' : b.status}</span></td>
-        <td><button class="btn-cancel" onclick="cancelBooking(${b.id})">Annuler</button></td>
-      </tr>`;
-    }).join('');
-  }
+// ── Drawer ─────────────────────────────────────────────────────────
+function openDrawer(b) {
+  selectedId = b.id;
+  const c      = empColor(b.employee_name || '');
+  const start  = new Date(b.start_time);
+  const end    = new Date(b.end_time);
+  const durMin = Math.round((end - start) / 60000);
 
-  // ── Modal ────────────────────────────────────────────────────
-  function openModal(b) {
-    activeModal = b;
-    document.getElementById('modal-title').textContent = b.client_name;
-    document.getElementById('modal-rows').innerHTML = [
-      ['Date', `${fmtDate(b.start_time)} à ${fmtTime(b.start_time)}`],
-      ['Prestation', b.service_label],
-      ['Durée', fmtDur(b.start_time, b.end_time)],
-      ['Coiffeur', b.employee_name],
-      ['Téléphone', b.client_phone || '—'],
-      ['Statut', b.status === 'confirmed' ? 'Confirmé' : b.status],
-    ].map(([l, v]) => `<div class="modal-row"><span class="modal-label">${l}</span><span class="modal-value">${esc(String(v))}</span></div>`).join('');
-    document.getElementById('modal-bg').classList.add('open');
-  }
+  document.getElementById('dAvatar').style.background = c.bg;
+  document.getElementById('dAvatar').textContent = initials(b.client_name);
+  document.getElementById('dClient').textContent = b.client_name || '—';
+  document.querySelector('#dPhone span').textContent = b.client_phone || 'Téléphone non renseigné';
+  document.getElementById('dService').textContent  = b.service_label || '—';
+  document.getElementById('dDuration').textContent = `${durMin} minutes`;
 
-  function closeModal(e) {
-    if (!e || e.target === document.getElementById('modal-bg')) {
-      document.getElementById('modal-bg').classList.remove('open');
-    }
-  }
+  const hS = String(start.getHours()).padStart(2,'0');
+  const mS = String(start.getMinutes()).padStart(2,'0');
+  const hE = String(end.getHours()).padStart(2,'0');
+  const mE = String(end.getMinutes()).padStart(2,'0');
+  document.getElementById('dTime').textContent = `${hS}h${mS} → ${hE}h${mE}`;
+  document.getElementById('dDate').textContent =
+    start.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
-  async function cancelFromModal() {
-    if (!activeModal) return;
-    if (!confirm(`Annuler le RDV de ${activeModal.client_name} ?`)) return;
-    await cancelBooking(activeModal.id);
-    closeModal();
-  }
+  const empDot = document.getElementById('dEmpDot');
+  empDot.style.background = c.bg;
+  empDot.textContent = initials(b.employee_name);
+  document.getElementById('dEmployee').textContent = b.employee_name || '—';
 
-  // ── Cancel ───────────────────────────────────────────────────
-  async function cancelBooking(id) {
-    if (!confirm('Annuler ce rendez-vous ?')) return;
-    try {
-      const r = await fetch(`${API}/bookings/${id}`, { method: 'DELETE' });
-      if (!r.ok) throw new Error();
-      allBookings = allBookings.filter(b => b.id !== id);
-      render();
-    } catch { alert('Erreur lors de l\'annulation.'); }
-  }
+  const notesWrap = document.getElementById('dNotesWrap');
+  document.getElementById('dNotes').textContent = b.notes || '';
+  b.notes ? notesWrap.classList.remove('hidden') : notesWrap.classList.add('hidden');
 
-  // ── View toggle ──────────────────────────────────────────────
-  function setView(v) {
-    document.getElementById('cal-view').style.display = v === 'cal' ? 'block' : 'none';
-    document.getElementById('list-view').style.display = v === 'list' ? 'block' : 'none';
-    document.getElementById('btn-cal').classList.toggle('active', v === 'cal');
-    document.getElementById('btn-list').classList.toggle('active', v === 'list');
-  }
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('backdrop').classList.add('show');
+  lucide.createIcons();
+}
 
-  // ── Countdown ────────────────────────────────────────────────
-  function resetCountdown() {
-    countdownSec = 60;
-    clearInterval(countdownTimer);
-    countdownTimer = setInterval(() => {
-      countdownSec--;
-      document.getElementById('countdown').textContent =
-        countdownSec > 0 ? `Actualisation dans ${countdownSec}s` : '';
-      if (countdownSec <= 0) { clearInterval(countdownTimer); loadBookings(); }
-    }, 1000);
-  }
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('backdrop').classList.remove('show');
+  selectedId = null;
+}
 
-  // ── Utils ─────────────────────────────────────────────────────
-  const MONTHS = ['jan','fév','mar','avr','mai','juin','juil','aoû','sep','oct','nov','déc'];
-  const DAYS   = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+async function cancelBooking() {
+  if (!selectedId) return;
+  if (!confirm('Annuler ce rendez-vous ?')) return;
+  try {
+    const p = new URLSearchParams();
+    if (token) p.append('token', token);
+    const r = await fetch(`/api/v1/bookings/${selectedId}?${p}`, { method: 'DELETE' });
+    if (r.ok || r.status === 200) {
+      bookings = bookings.filter(b => b.id !== selectedId);
+      closeDrawer(); render(); showToast('Rendez-vous annulé');
+    } else { showToast('Erreur lors de l\'annulation', 'error'); }
+  } catch { showToast('Erreur réseau', 'error'); }
+}
 
-  function fmtDate(iso) {
-    const d = new Date(iso);
-    return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
-  }
-  function fmtTime(iso) {
-    const d = new Date(iso);
-    const m = d.getMinutes().toString().padStart(2,'0');
-    return m === '00' ? `${d.getHours()}h` : `${d.getHours()}h${m}`;
-  }
-  function fmtDur(s, e) {
-    const m = Math.round((new Date(e) - new Date(s)) / 60000);
-    if (m < 60) return `${m} min`;
-    const h = Math.floor(m / 60), r = m % 60;
-    return r ? `${h}h${r.toString().padStart(2,'0')}` : `${h}h`;
-  }
-  function esc(s) {
-    return String(s ?? '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-  function show(id) { document.getElementById(id).style.display = 'block'; }
-  function hide(id) { document.getElementById(id).style.display = 'none'; }
+// ── Navigation ─────────────────────────────────────────────────────
+function changeWeek(delta) { weekOffset += delta; render(); }
+function goToToday()       { weekOffset = 0;       render(); }
 
-  // ── Init ──────────────────────────────────────────────────────
-  (async () => {
-    const ok = await loadBookings();
-    if (!ok) { clearToken(); document.getElementById('login-screen').style.display = 'flex'; }
-  })();
+function setView(v, silent = false) {
+  view = v;
+  const calView  = document.getElementById('calView');
+  const listView = document.getElementById('listView');
+  const btnCal   = document.getElementById('btnCal');
+  const btnList  = document.getElementById('btnList');
+  const on  = 'bg-white shadow-sm text-slate-700';
+  const off = 'text-slate-500 hover:text-slate-700';
+
+  if (v === 'calendar') {
+    calView.classList.remove('hidden'); listView.classList.add('hidden');
+    btnCal.className  = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    btnList.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
+  } else {
+    listView.classList.remove('hidden'); calView.classList.add('hidden');
+    btnList.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    btnCal.className  = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
+  }
+  if (!silent) render();
+}
+
+// ── Refresh countdown ──────────────────────────────────────────────
+function resetCountdown() {
+  clearInterval(refreshTimer);
+  countdown = 60;
+  document.getElementById('refreshCountdown').textContent = 60;
+  refreshTimer = setInterval(() => {
+    countdown--;
+    document.getElementById('refreshCountdown').textContent = countdown;
+    if (countdown <= 0) loadBookings();
+  }, 1000);
+}
+
+// ── Toast ──────────────────────────────────────────────────────────
+function showToast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = type === 'error' ? '#dc2626' : '#0f172a';
+  el.classList.add('up');
+  setTimeout(() => el.classList.remove('up'), 3200);
+}
 </script>
 </body>
 </html>
