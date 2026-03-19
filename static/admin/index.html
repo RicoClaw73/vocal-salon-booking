@@ -193,6 +193,100 @@
     .cb-badge.pending    { background:#fff7ed; color:#c2410c; }
     .cb-badge.called_back{ background:#f0fdf4; color:#166534; }
     .cb-badge.resolved   { background:#f1f5f9; color:#475569; }
+    /* ── Create booking modal ────────────────── */
+    .create-modal-bg {
+      position: fixed; inset: 0; background: rgba(15,23,42,.45);
+      backdrop-filter: blur(4px); z-index: 60;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity .22s ease;
+    }
+    .create-modal-bg.open { opacity: 1; pointer-events: all; }
+    .create-modal {
+      background: #fff; border-radius: 20px;
+      width: 100%; max-width: 480px; margin: 16px;
+      box-shadow: 0 24px 80px rgba(0,0,0,.22);
+      transform: translateY(16px) scale(.98);
+      transition: transform .22s cubic-bezier(.4,0,.2,1);
+      max-height: 90vh; overflow-y: auto;
+    }
+    .create-modal-bg.open .create-modal { transform: translateY(0) scale(1); }
+    .form-label { font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px; display: block; }
+    .form-input {
+      width: 100%; padding: 9px 13px; border: 1.5px solid #e2e8f0; border-radius: 10px;
+      font-size: 14px; color: #0f172a; background: #fff;
+      transition: border-color .15s; outline: none; font-family: inherit;
+    }
+    .form-input:focus { border-color: #a855f7; }
+    .slot-radio { display: none; }
+    .slot-label {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 10px; cursor: pointer;
+      border: 1.5px solid #e2e8f0; font-size: 13px; font-weight: 500;
+      color: #475569; transition: all .13s ease; background: #f8fafc;
+    }
+    .slot-radio:checked + .slot-label {
+      background: #f5f3ff; border-color: #a855f7; color: #7e22ce;
+    }
+    .slot-label:hover { border-color: #c4b5fd; background: #faf5ff; }
+
+    /* ── Settings view ───────────────────────── */
+    .settings-section {
+      background: #fff; border: 1px solid #f1f5f9;
+      border-radius: 16px; padding: 20px 22px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    }
+    .settings-section-title {
+      font-size: 13px; font-weight: 700; color: #7c3aed;
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 16px;
+    }
+    .settings-row {
+      display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px;
+    }
+    .settings-row:last-child { margin-bottom: 0; }
+    .settings-input-wrap { position: relative; display: flex; align-items: center; }
+    .settings-input-wrap .form-input { padding-right: 38px; }
+    .eye-btn {
+      position: absolute; right: 10px; cursor: pointer;
+      color: #94a3b8; background: none; border: none; padding: 4px;
+      display: flex; align-items: center;
+    }
+    .eye-btn:hover { color: #475569; }
+    .settings-hint { font-size: 11.5px; color: #94a3b8; }
+    .settings-status {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 600; padding: 2px 8px;
+      border-radius: 20px;
+    }
+    .settings-status.on  { background: #f0fdf4; color: #166534; }
+    .settings-status.off { background: #fef2f2; color: #991b1b; }
+    .toggle-wrap { display: flex; align-items: center; gap: 12px; }
+    .toggle {
+      position: relative; display: inline-block; width: 44px; height: 24px;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: #e2e8f0; border-radius: 24px;
+      transition: background .2s ease;
+    }
+    .toggle-slider::before {
+      position: absolute; content: ""; height: 18px; width: 18px;
+      left: 3px; bottom: 3px; background: #fff;
+      border-radius: 50%; transition: transform .2s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,.15);
+    }
+    .toggle input:checked + .toggle-slider { background: #a855f7; }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+    .toggle-label { font-size: 13.5px; font-weight: 500; color: #374151; }
+    .save-section-btn {
+      margin-top: 16px; width: 100%;
+      padding: 9px; border-radius: 10px; font-size: 13.5px; font-weight: 600;
+      background: #7c3aed; color: #fff; border: none; cursor: pointer;
+      transition: background .15s;
+    }
+    .save-section-btn:hover { background: #6d28d9; }
+    .save-section-btn:disabled { background: #c4b5fd; cursor: not-allowed; }
   </style>
 </head>
 
@@ -280,6 +374,14 @@
     <!-- Spacer -->
     <div class="flex-1"></div>
 
+    <!-- New booking button -->
+    <button onclick="openCreateModal()"
+            class="flex items-center gap-1.5 px-3 h-8 bg-brand-600 hover:bg-brand-700
+                   text-white text-xs font-semibold rounded-lg transition flex-shrink-0">
+      <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+      <span class="hidden sm:block">Nouveau RDV</span>
+    </button>
+
     <!-- History toggle -->
     <div class="hist-pill hidden md:inline-flex" id="histToggle">
       <button id="histBtnUpcoming" class="active" onclick="setHistoryMode(false)">À venir</button>
@@ -329,6 +431,12 @@
                      transition flex items-center gap-1.5 text-xs font-medium">
         <i data-lucide="bar-chart-2" class="w-3.5 h-3.5"></i>
         <span class="hidden sm:block">Stats</span>
+      </button>
+      <button onclick="setView('settings')" id="btnSettings"
+              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
+                     transition flex items-center gap-1.5 text-xs font-medium">
+        <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:block">Paramètres</span>
       </button>
     </div>
   </header>
@@ -429,6 +537,110 @@
     </div>
   </div>
 
+  <!-- ── Settings view ──────────────────────── -->
+  <div id="settingsView" class="hidden flex-1 overflow-y-auto scroll">
+    <div class="max-w-2xl mx-auto px-4 py-6 pb-24">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-base font-semibold text-slate-800">Paramètres du salon</h2>
+        <span class="text-xs text-slate-400">Les modifications s'appliquent immédiatement</span>
+      </div>
+      <div id="settingsSections" class="flex flex-col gap-5"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Create booking modal ─────────────────── -->
+<div id="createModalBg" class="create-modal-bg" onclick="if(event.target===this)closeCreateModal()">
+  <div class="create-modal scroll">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+      <h2 class="font-semibold text-slate-900 flex items-center gap-2">
+        <i data-lucide="calendar-plus" class="w-4 h-4 text-brand-600"></i>
+        Nouveau rendez-vous
+      </h2>
+      <button onclick="closeCreateModal()"
+              class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center
+                     justify-center transition text-slate-400">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="px-6 py-5 space-y-4">
+
+      <!-- Client info -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="form-label">Nom du client <span class="text-red-400">*</span></label>
+          <input id="cName" type="text" class="form-input" placeholder="Jean Dupont" />
+        </div>
+        <div>
+          <label class="form-label">Téléphone</label>
+          <input id="cPhone" type="tel" class="form-input" placeholder="+33 6 …" />
+        </div>
+      </div>
+
+      <!-- Service -->
+      <div>
+        <label class="form-label">Prestation <span class="text-red-400">*</span></label>
+        <select id="cService" class="form-input" onchange="onCreateFormChange()">
+          <option value="">Choisir une prestation…</option>
+        </select>
+        <div id="cServiceInfo" class="text-xs text-slate-400 mt-1.5 hidden"></div>
+      </div>
+
+      <!-- Employee + Date (side by side) -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="form-label">Coiffeur·se</label>
+          <select id="cEmployee" class="form-input" onchange="onCreateFormChange()">
+            <option value="">Au choix</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Date <span class="text-red-400">*</span></label>
+          <input id="cDate" type="date" class="form-input" onchange="onCreateFormChange()" />
+        </div>
+      </div>
+
+      <!-- Slots -->
+      <div id="cSlotsWrap" class="hidden">
+        <label class="form-label">Créneau disponible <span class="text-red-400">*</span></label>
+        <div id="cSlots" class="flex flex-wrap gap-2 mt-1"></div>
+        <div id="cSlotsEmpty" class="hidden text-sm text-slate-400 italic mt-1">
+          Aucun créneau disponible pour cette sélection.
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <label class="form-label">Notes <span class="text-slate-300 font-normal">(optionnel)</span></label>
+        <textarea id="cNotes" class="form-input" rows="2"
+                  placeholder="Allergie coloration, cheveux fins…"
+                  style="resize:vertical"></textarea>
+      </div>
+
+      <!-- Error -->
+      <div id="cError" class="hidden text-sm text-red-500 bg-red-50 rounded-xl px-4 py-3"></div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="flex gap-3 px-6 py-5 border-t border-slate-100">
+      <button onclick="closeCreateModal()"
+              class="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm
+                     font-medium text-slate-600 hover:bg-slate-50 transition">
+        Annuler
+      </button>
+      <button onclick="submitCreateBooking()" id="cSubmitBtn"
+              class="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700
+                     text-white text-sm font-semibold transition">
+        Confirmer le rendez-vous
+      </button>
+    </div>
+
+  </div>
 </div>
 
 <!-- ── Drawer backdrop ──────────────────────── -->
@@ -957,16 +1169,18 @@ function goToToday()       { weekOffset = 0;       render(); }
 
 function setView(v, silent = false) {
   view = v;
-  const calView       = document.getElementById('calView');
-  const listView      = document.getElementById('listView');
-  const callbacksView = document.getElementById('callbacksView');
-  const statsView     = document.getElementById('statsView');
-  const btnCal        = document.getElementById('btnCal');
-  const btnList       = document.getElementById('btnList');
-  const btnCallbacks  = document.getElementById('btnCallbacks');
-  const btnStats      = document.getElementById('btnStats');
-  const empBar        = document.getElementById('empBar');
-  const histToggle    = document.getElementById('histToggle');
+  const calView        = document.getElementById('calView');
+  const listView       = document.getElementById('listView');
+  const callbacksView  = document.getElementById('callbacksView');
+  const statsView      = document.getElementById('statsView');
+  const settingsView   = document.getElementById('settingsView');
+  const btnCal         = document.getElementById('btnCal');
+  const btnList        = document.getElementById('btnList');
+  const btnCallbacks   = document.getElementById('btnCallbacks');
+  const btnStats       = document.getElementById('btnStats');
+  const btnSettings    = document.getElementById('btnSettings');
+  const empBar         = document.getElementById('empBar');
+  const histToggle     = document.getElementById('histToggle');
   const on  = 'bg-white shadow-sm text-slate-700';
   const off = 'text-slate-500 hover:text-slate-700';
 
@@ -974,10 +1188,12 @@ function setView(v, silent = false) {
   listView.classList.add('hidden');
   callbacksView.classList.add('hidden');
   statsView.classList.add('hidden');
+  settingsView.classList.add('hidden');
   btnCal.className       = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
   btnList.className      = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
   btnCallbacks.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium relative ${off}`;
   btnStats.className     = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
+  btnSettings.className  = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
 
   if (v === 'calendar') {
     calView.classList.remove('hidden');
@@ -997,6 +1213,12 @@ function setView(v, silent = false) {
     empBar.classList.add('hidden');
     histToggle.classList.add('hidden');
     loadStats();
+  } else if (v === 'settings') {
+    settingsView.classList.remove('hidden');
+    btnSettings.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    empBar.classList.add('hidden');
+    histToggle.classList.add('hidden');
+    loadSettingsView();
   } else {
     // callbacks
     callbacksView.classList.remove('hidden');
@@ -1164,6 +1386,213 @@ function renderCallbacks() {
   lucide.createIcons();
 }
 
+// ── Create Booking Modal ─────────────────────────────────────────────
+let createServices = [];
+let createEmployees = [];
+let createSelectedSlot = null; // {start_time, employee_id}
+
+async function openCreateModal() {
+  // Reset form
+  ['cName','cPhone','cNotes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('cService').value = '';
+  document.getElementById('cEmployee').value = '';
+  document.getElementById('cDate').value = '';
+  document.getElementById('cDate').min = new Date().toISOString().slice(0,10);
+  document.getElementById('cSlotsWrap').classList.add('hidden');
+  document.getElementById('cError').classList.add('hidden');
+  document.getElementById('cServiceInfo').classList.add('hidden');
+  createSelectedSlot = null;
+
+  // Show modal immediately, load data in parallel
+  document.getElementById('createModalBg').classList.add('open');
+  lucide.createIcons();
+
+  try {
+    const p = new URLSearchParams();
+    if (token) p.append('token', token);
+    const [svcsRes, empsRes] = await Promise.all([
+      fetch(`/api/v1/admin/services?${p}`),
+      fetch(`/api/v1/admin/employees?${p}`),
+    ]);
+    createServices  = await svcsRes.json();
+    createEmployees = await empsRes.json();
+    _populateCreateSelects();
+  } catch (err) {
+    showCreateError('Erreur de chargement des données.');
+  }
+}
+
+function _populateCreateSelects() {
+  // Services grouped by category
+  const svcSel = document.getElementById('cService');
+  svcSel.innerHTML = '<option value="">Choisir une prestation…</option>';
+  const cats = {};
+  createServices.forEach(s => {
+    if (!cats[s.category_label]) cats[s.category_label] = [];
+    cats[s.category_label].push(s);
+  });
+  Object.entries(cats).forEach(([cat, svcs]) => {
+    const grp = document.createElement('optgroup');
+    grp.label = cat;
+    svcs.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = `${s.label} — ${s.duree_min}min · ${s.prix_eur}€`;
+      opt.dataset.prix = s.prix_eur;
+      opt.dataset.duree = s.duree_min;
+      grp.appendChild(opt);
+    });
+    svcSel.appendChild(grp);
+  });
+
+  // Employees
+  const empSel = document.getElementById('cEmployee');
+  empSel.innerHTML = '<option value="">Au choix</option>';
+  createEmployees.forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = `${e.prenom} ${e.nom}`;
+    empSel.appendChild(opt);
+  });
+}
+
+function closeCreateModal() {
+  document.getElementById('createModalBg').classList.remove('open');
+}
+
+function showCreateError(msg) {
+  const el = document.getElementById('cError');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function onCreateFormChange() {
+  const svcId   = document.getElementById('cService').value;
+  const dateVal = document.getElementById('cDate').value;
+  document.getElementById('cError').classList.add('hidden');
+  createSelectedSlot = null;
+
+  // Show service info
+  const svcInfo = document.getElementById('cServiceInfo');
+  const svc = createServices.find(s => s.id === svcId);
+  if (svc) {
+    svcInfo.textContent = `${svc.duree_min} min · ${svc.prix_eur} €`;
+    svcInfo.classList.remove('hidden');
+  } else {
+    svcInfo.classList.add('hidden');
+  }
+
+  if (svcId && dateVal) {
+    checkCreateSlots(svcId, dateVal);
+  } else {
+    document.getElementById('cSlotsWrap').classList.add('hidden');
+  }
+}
+
+async function checkCreateSlots(svcId, dateVal) {
+  const empId = document.getElementById('cEmployee').value;
+  const slotsWrap = document.getElementById('cSlotsWrap');
+  const slotsEl   = document.getElementById('cSlots');
+  const emptyEl   = document.getElementById('cSlotsEmpty');
+
+  slotsWrap.classList.remove('hidden');
+  slotsEl.innerHTML = '<span class="text-xs text-slate-400 animate-pulse">Chargement…</span>';
+  emptyEl.classList.add('hidden');
+  createSelectedSlot = null;
+
+  try {
+    const p = new URLSearchParams({ service_id: svcId, date: dateVal });
+    if (empId) p.append('employee_id', empId);
+    const r = await fetch(`/api/v1/availability/search?${p}`);
+    if (!r.ok) throw new Error();
+    const slots = await r.json();
+
+    slotsEl.innerHTML = '';
+    if (!slots.length) {
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    slots.forEach((slot, i) => {
+      const start = new Date(slot.start);
+      const hh    = String(start.getHours()).padStart(2,'0');
+      const mm    = String(start.getMinutes()).padStart(2,'0');
+      const empName = slot.employee
+        ? ` · ${slot.employee.prenom}`
+        : '';
+      const label = `${hh}h${mm}${empName}`;
+      const slotEmpId = slot.employee?.id || empId;
+
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `
+        <input type="radio" name="createSlot" id="slot_${i}" class="slot-radio"
+               data-start="${slot.start}" data-emp="${slotEmpId}" />
+        <label for="slot_${i}" class="slot-label">${label}</label>`;
+      wrap.firstElementChild.addEventListener('change', () => {
+        createSelectedSlot = {
+          start_time: slot.start,
+          employee_id: slotEmpId,
+        };
+      });
+      slotsEl.appendChild(wrap);
+    });
+  } catch {
+    emptyEl.textContent = 'Erreur lors de la vérification des créneaux.';
+    emptyEl.classList.remove('hidden');
+    slotsEl.innerHTML = '';
+  }
+}
+
+async function submitCreateBooking() {
+  const name    = document.getElementById('cName').value.trim();
+  const phone   = document.getElementById('cPhone').value.trim() || null;
+  const svcId   = document.getElementById('cService').value;
+  const notes   = document.getElementById('cNotes').value.trim() || null;
+
+  document.getElementById('cError').classList.add('hidden');
+
+  if (!name)              return showCreateError('Le nom du client est obligatoire.');
+  if (!svcId)             return showCreateError('Veuillez choisir une prestation.');
+  if (!document.getElementById('cDate').value)
+                          return showCreateError('Veuillez choisir une date.');
+  if (!createSelectedSlot) return showCreateError('Veuillez sélectionner un créneau.');
+
+  const btn = document.getElementById('cSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement…';
+
+  try {
+    const body = {
+      client_name:  name,
+      client_phone: phone,
+      service_id:   svcId,
+      employee_id:  createSelectedSlot.employee_id,
+      start_time:   createSelectedSlot.start_time,
+      notes,
+    };
+    const r = await fetch('/api/v1/bookings', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+
+    if (r.status === 409) {
+      const err = await r.json();
+      return showCreateError(err.detail || 'Créneau non disponible.');
+    }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+    closeCreateModal();
+    showToast('Rendez-vous créé avec succès');
+    await loadBookings();
+  } catch (err) {
+    if (!err.message?.startsWith('HTTP')) showCreateError('Erreur réseau, veuillez réessayer.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmer le rendez-vous';
+  }
+}
+
 // ── Stats ───────────────────────────────────────────────────────────
 let statsData = null;
 
@@ -1238,6 +1667,172 @@ function renderStats() {
     });
   }
   lucide.createIcons();
+}
+
+// ── Settings View ────────────────────────────────────────────────────
+let settingsData = [];
+
+async function loadSettingsView() {
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  try {
+    const r = await fetch(`/api/v1/admin/settings?${p}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    settingsData = await r.json();
+    renderSettingsView();
+  } catch {
+    document.getElementById('settingsSections').innerHTML =
+      '<p class="text-sm text-slate-400 text-center py-8">Erreur de chargement des paramètres.</p>';
+  }
+}
+
+function renderSettingsView() {
+  const container = document.getElementById('settingsSections');
+  // Group by section
+  const sections = {};
+  settingsData.forEach(s => {
+    if (!sections[s.section]) sections[s.section] = [];
+    sections[s.section].push(s);
+  });
+
+  container.innerHTML = '';
+  Object.entries(sections).forEach(([sectionName, items]) => {
+    const sectionId = sectionName.replace(/[^a-z0-9]/gi, '_');
+    let fieldsHtml = '';
+    items.forEach(item => {
+      if (item.type === 'bool') {
+        const checked = item.value === 'true' ? 'checked' : '';
+        fieldsHtml += `
+          <div class="settings-row">
+            <label class="form-label">${item.label}</label>
+            <div class="toggle-wrap">
+              <label class="toggle">
+                <input type="checkbox" id="stg_${item.key}" ${checked}
+                       onchange="onSettingToggle('${item.key}', this.checked, '${sectionId}')">
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="toggle-label" id="stg_${item.key}_lbl">${item.value === 'true' ? 'Activé' : 'Désactivé'}</span>
+            </div>
+            ${item.description ? `<span class="settings-hint">${item.description}</span>` : ''}
+          </div>`;
+      } else if (item.is_sensitive) {
+        const hasVal = item.is_set;
+        const badge = hasVal
+          ? '<span class="settings-status on">✓ Configuré</span>'
+          : '<span class="settings-status off">Non configuré</span>';
+        fieldsHtml += `
+          <div class="settings-row">
+            <div class="flex items-center gap-2 mb-1">
+              <label class="form-label mb-0">${item.label}</label>
+              ${badge}
+            </div>
+            <div class="settings-input-wrap">
+              <input type="password" id="stg_${item.key}" class="form-input"
+                     placeholder="Laisser vide pour ne pas modifier"
+                     autocomplete="off" />
+              <button class="eye-btn" type="button" onclick="toggleEye('${item.key}')">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </button>
+            </div>
+            ${item.description ? `<span class="settings-hint">${item.description}</span>` : ''}
+          </div>`;
+      } else if (item.type === 'int') {
+        fieldsHtml += `
+          <div class="settings-row">
+            <label class="form-label" for="stg_${item.key}">${item.label}</label>
+            <input type="number" id="stg_${item.key}" class="form-input"
+                   value="${item.value}" min="0" />
+            ${item.description ? `<span class="settings-hint">${item.description}</span>` : ''}
+          </div>`;
+      } else {
+        fieldsHtml += `
+          <div class="settings-row">
+            <label class="form-label" for="stg_${item.key}">${item.label}</label>
+            <input type="text" id="stg_${item.key}" class="form-input"
+                   value="${item.value || ''}" placeholder="" />
+            ${item.description ? `<span class="settings-hint">${item.description}</span>` : ''}
+          </div>`;
+      }
+    });
+
+    const sectionHtml = `
+      <div class="settings-section">
+        <div class="settings-section-title">${sectionName}</div>
+        ${fieldsHtml}
+        <div id="stg_err_${sectionId}" class="hidden text-xs text-red-500 mt-2"></div>
+        <button class="save-section-btn" id="stg_save_${sectionId}"
+                onclick="saveSection('${sectionId}', ${JSON.stringify(items.map(i => i.key))})">
+          Enregistrer
+        </button>
+      </div>`;
+    container.innerHTML += sectionHtml;
+  });
+  lucide.createIcons();
+}
+
+function toggleEye(key) {
+  const input = document.getElementById(`stg_${key}`);
+  if (!input) return;
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function onSettingToggle(key, checked, sectionId) {
+  const lbl = document.getElementById(`stg_${key}_lbl`);
+  if (lbl) lbl.textContent = checked ? 'Activé' : 'Désactivé';
+}
+
+async function saveSection(sectionId, keys) {
+  const btn = document.getElementById(`stg_save_${sectionId}`);
+  const errEl = document.getElementById(`stg_err_${sectionId}`);
+  errEl.classList.add('hidden');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement…';
+
+  const updates = {};
+  keys.forEach(key => {
+    const input = document.getElementById(`stg_${key}`);
+    if (!input) return;
+    const meta = settingsData.find(s => s.key === key);
+    if (!meta) return;
+    if (meta.type === 'bool') {
+      updates[key] = input.checked ? 'true' : 'false';
+    } else if (meta.is_sensitive) {
+      // Only send if user typed something (empty = keep existing)
+      if (input.value.trim()) updates[key] = input.value.trim();
+    } else {
+      updates[key] = input.value.trim();
+    }
+  });
+
+  if (!Object.keys(updates).length) {
+    btn.disabled = false;
+    btn.textContent = 'Enregistrer';
+    return;
+  }
+
+  try {
+    const p = new URLSearchParams();
+    if (token) p.append('token', token);
+    const r = await fetch(`/api/v1/admin/settings?${p}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${r.status}`);
+    }
+    settingsData = await r.json();
+    showToast('Paramètres enregistrés');
+    // Clear password fields and re-render to update status badges
+    renderSettingsView();
+  } catch (err) {
+    errEl.textContent = err.message || 'Erreur lors de la sauvegarde.';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Enregistrer';
+  }
 }
 
 async function markCallback(id, newStatus) {

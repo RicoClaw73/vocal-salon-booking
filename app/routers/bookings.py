@@ -17,10 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
+from app.email_sender import send_owner_booking_email
 from app.models import Booking, BookingStatus
 from app.schemas import BookingCancelOut, BookingCreate, BookingOut, BookingReschedule
 from app.slot_engine import validate_booking_request
-from app.sms_sender import send_owner_cancel_alert
+from app.sms_sender import send_owner_booking_alert, send_owner_cancel_alert
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -81,6 +82,31 @@ async def create_booking(
 
     # Re-fetch with eager-loaded relationships
     loaded = await _get_booking_with_rels(db, booking.id)
+
+    # Notify salon owner (fire-and-forget)
+    svc_label = loaded.service.label if loaded.service else payload.service_id
+    emp_name = f"{loaded.employee.prenom} {loaded.employee.nom}" if loaded.employee else payload.employee_id
+    date_str = payload.start_time.strftime("%Y-%m-%d")
+    time_str = payload.start_time.strftime("%H:%M")
+    asyncio.create_task(send_owner_booking_alert(
+        booking_id=loaded.id,
+        svc_label=svc_label,
+        emp_name=emp_name,
+        date_str=date_str,
+        time_str=time_str,
+        client_name=payload.client_name,
+        client_phone=payload.client_phone,
+    ))
+    asyncio.create_task(send_owner_booking_email(
+        booking_id=loaded.id,
+        svc_label=svc_label,
+        emp_name=emp_name,
+        date_str=date_str,
+        time_str=time_str,
+        client_name=payload.client_name,
+        client_phone=payload.client_phone,
+    ))
+
     return _booking_to_out(loaded)
 
 

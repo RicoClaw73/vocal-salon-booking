@@ -1,7 +1,9 @@
 """
 Admin dashboard API.
 
-GET /api/v1/admin/bookings  — upcoming bookings (token-protected)
+GET  /api/v1/admin/bookings   — upcoming bookings (token-protected)
+GET  /api/v1/admin/settings   — read runtime settings
+PATCH /api/v1/admin/settings  — update runtime settings
 """
 
 from __future__ import annotations
@@ -16,9 +18,10 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import Booking, BookingStatus, CallbackRequest, CallbackRequestStatus
+from app.models import Booking, BookingStatus, CallbackRequest, CallbackRequestStatus, Employee, Service
 from app.routers.bookings import _booking_to_out
 from app.schemas import BookingOut
+from app.settings_service import get_settings_with_values, update_settings
 
 
 # ── Callback schemas ──────────────────────────────────────────
@@ -96,6 +99,46 @@ async def update_callback(
 
     await db.commit()
     return {"id": callback_id, "status": cb.status.value}
+
+
+@router.get("/services")
+async def list_services(
+    token: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Return all services for the create-booking form."""
+    _require_token(token)
+    result = await db.execute(
+        select(Service).order_by(Service.category_label, Service.label)
+    )
+    svcs = result.scalars().all()
+    return [
+        {
+            "id": s.id,
+            "label": s.label,
+            "category_label": s.category_label,
+            "prix_eur": s.prix_eur,
+            "duree_min": s.duree_min,
+        }
+        for s in svcs
+    ]
+
+
+@router.get("/employees")
+async def list_employees(
+    token: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Return all employees for the create-booking form."""
+    _require_token(token)
+    result = await db.execute(
+        select(Employee).order_by(Employee.prenom)
+    )
+    emps = result.scalars().all()
+    return [
+        {"id": e.id, "prenom": e.prenom, "nom": e.nom}
+        for e in emps
+    ]
 
 
 @router.get("/stats")
@@ -222,3 +265,28 @@ async def list_bookings(
 
     bookings = result.scalars().all()
     return [_booking_to_out(b) for b in bookings]
+
+
+# ── Settings ──────────────────────────────────────────────────
+
+@router.get("/settings")
+async def get_settings(
+    token: str | None = Query(None),
+) -> list[dict]:
+    """Return all editable runtime settings with their current values (sensitive fields masked)."""
+    _require_token(token)
+    return get_settings_with_values()
+
+
+@router.patch("/settings")
+async def patch_settings(
+    body: dict[str, str],
+    token: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Update one or more runtime settings. Changes take effect immediately."""
+    _require_token(token)
+    if not body:
+        raise HTTPException(status_code=400, detail="Aucun paramètre fourni.")
+    await update_settings(db, body)
+    return get_settings_with_values()

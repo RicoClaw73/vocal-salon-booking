@@ -8,6 +8,7 @@ Tables:
   - bookings              Client appointments
   - voice_sessions        Persistent voice conversation sessions (Phase 4.3)
   - transcript_events     Per-turn transcript log for voice sessions (Phase 4.3)
+  - salon_settings        Runtime-editable key-value settings (overrides env vars)
 
 Design choices
 --------------
@@ -250,3 +251,19 @@ class TranscriptEvent(Base):
 
     # relationships
     session: Mapped["VoiceSession"] = relationship(back_populates="events")
+
+
+# ── Runtime Settings ─────────────────────────────────────────
+
+class SalonSetting(Base):
+    """
+    Key-value store for runtime-editable settings.
+    Overrides env vars loaded at startup via settings_service.load_settings_from_db().
+    """
+    __tablename__ = "salon_settings"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

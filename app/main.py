@@ -22,6 +22,7 @@ from sqlalchemy import text
 from app.audio_store import cleanup_loop, cleanup_old_files
 from app.purge import purge_loop
 from app.reminder import reminder_loop
+from app.settings_service import load_settings_from_db
 from app.config import settings
 from app.database import async_session, engine
 from app.models import Base
@@ -48,6 +49,10 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     async with async_session() as session:
         summary = await seed_all(session)
         logger.info("Seed complete: %s", summary)
+
+    logger.info("Loading runtime settings from DB …")
+    async with async_session() as session:
+        await load_settings_from_db(session)
 
     # Audio store: create dir + initial cleanup
     audio_dir = Path(settings.AUDIO_DIR)
