@@ -25,6 +25,7 @@ from app.reminder import reminder_loop
 from app.settings_service import load_settings_from_db
 from app.config import settings
 from app.database import async_session, engine
+from app.migrations import run_migrations
 from app.models import Base
 from app.observability import metrics
 from app.routers import admin, availability, bookings, employees, ops, services, telephony, voice
@@ -42,6 +43,9 @@ API_PREFIX = "/api/v1"
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     """Startup: create tables, seed data, init audio store. Shutdown: dispose engine."""
+    logger.info("Running additive migrations …")
+    await run_migrations(engine)
+
     logger.info("Creating database tables …")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

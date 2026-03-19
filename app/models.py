@@ -230,6 +230,10 @@ class VoiceSession(Base):
     # LLM conversation history — JSON array of OpenAI messages dicts
     messages_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # RGPD consent: None=pending, True=accepted (implicit), False=refused (DTMF "1")
+    consent_given: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    consent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False), nullable=True)
+
     # relationships
     events: Mapped[list["TranscriptEvent"]] = relationship(
         back_populates="session",
