@@ -41,8 +41,49 @@ class EmployeeSlim(BaseModel):
     nom: str
     role: str
     niveau: str
+    horaires_json: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class EmployeeCreate(BaseModel):
+    prenom: str
+    nom: str
+    role: str = ""
+    horaires_json: str = "{}"
+    notes: str = ""
+
+
+class EmployeeUpdate(BaseModel):
+    prenom: str | None = None
+    nom: str | None = None
+    role: str | None = None
+    horaires_json: str | None = None
+    notes: str | None = None
+
+
+class ServiceCreate(BaseModel):
+    label: str
+    category_label: str = "Prestation"
+    category_id: str = "general"
+    prix_eur: float = 0.0
+    duree_min: int = 30
+    genre: str = "mixte"
+    description: str = ""
+    longueur: str = "tout"
+    is_chemical: bool = False
+
+
+class ServiceUpdate(BaseModel):
+    label: str | None = None
+    category_label: str | None = None
+    category_id: str | None = None
+    prix_eur: float | None = None
+    duree_min: int | None = None
+    genre: str | None = None
+    description: str | None = None
+    longueur: str | None = None
+    is_chemical: bool | None = None
 
 
 # ── Availability ─────────────────────────────────────────────

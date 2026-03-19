@@ -152,7 +152,7 @@ async def list_employees(
     )
     emps = result.scalars().all()
     return [
-        {"id": e.id, "prenom": e.prenom, "nom": e.nom}
+        {"id": e.id, "prenom": e.prenom, "nom": e.nom, "role": e.role or "", "horaires_json": e.horaires_json or "{}"}
         for e in emps
     ]
 

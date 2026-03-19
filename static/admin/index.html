@@ -205,6 +205,58 @@
     }
     .stg-tab.on { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.10); color: #0f172a; }
 
+    /* ── Settings CRUD & Planning ── */
+    .crud-table { width: 100%; border-collapse: collapse; }
+    .crud-table th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 700;
+      color: var(--text-muted,#94a3b8); text-transform: uppercase; letter-spacing: .06em;
+      border-bottom: 1px solid var(--border,#e2e8f0); }
+    .crud-table td { padding: 10px 12px; font-size: 13.5px; border-bottom: 1px solid var(--border,#f1f5f9); vertical-align: middle; }
+    .crud-table tr:last-child td { border-bottom: none; }
+    .crud-actions { display: flex; gap: 6px; }
+    .btn-icon-sm { background: none; border: 1px solid var(--border,#e2e8f0); border-radius: 6px;
+      padding: 4px 8px; cursor: pointer; font-size: 12px; color: var(--text-muted,#94a3b8);
+      transition: all .14s; line-height: 1; }
+    .btn-icon-sm:hover { border-color: var(--accent,#9B6B2C); color: var(--accent,#9B6B2C); }
+    .btn-icon-sm.danger:hover { border-color: #ef4444; color: #ef4444; }
+    .add-row-btn { margin-top: 10px; background: none; border: 1px dashed var(--accent,#9B6B2C);
+      color: var(--accent,#9B6B2C); border-radius: 8px; padding: 7px 16px; font-size: 13px;
+      cursor: pointer; width: 100%; transition: all .14s; }
+    .add-row-btn:hover { background: rgba(155,107,44,.07); }
+    .emp-color-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+      flex-shrink: 0; margin-right: 6px; vertical-align: middle; }
+    /* Planning grid */
+    .planning-table { width: 100%; border-collapse: collapse; min-width: 600px; }
+    .planning-table th { padding: 8px 6px; text-align: center; font-size: 11px; font-weight: 700;
+      color: var(--text-muted,#94a3b8); text-transform: uppercase; letter-spacing: .06em; }
+    .planning-table th:first-child { text-align: left; width: 130px; }
+    .planning-table td { padding: 8px 4px; vertical-align: top; border-top: 1px solid var(--border,#f1f5f9); }
+    .planning-table td:first-child { padding-left: 0; }
+    .planning-day-toggle { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+    .planning-time-inputs { display: flex; flex-direction: column; gap: 3px; }
+    .planning-time-inputs input[type=time] { font-size: 11px; padding: 3px 5px;
+      border: 1px solid var(--border,#e2e8f0); border-radius: 5px;
+      background: var(--bg,#F6F1E9); color: var(--text,#1a1a1a); width: 74px; }
+    .planning-save-row { display: flex; justify-content: flex-end; margin-top: 14px; }
+    /* SMS preview */
+    .sms-preview-panel { background: var(--surface,#FDFAF5); border: 1px solid var(--border,#e2e8f0);
+      border-radius: 12px; padding: 16px 18px; margin-bottom: 20px; }
+    .sms-preview-title { font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--accent,#9B6B2C); margin-bottom: 10px; }
+    .sms-preview-bubble { background: #e9e9eb; border-radius: 16px 16px 4px 16px;
+      padding: 10px 14px; font-size: 13px; line-height: 1.55; color: #1c1c1e;
+      max-width: 280px; white-space: pre-wrap; min-height: 40px; }
+    .sms-preview-select { font-size: 13px; padding: 5px 10px; border: 1px solid var(--border,#e2e8f0);
+      border-radius: 8px; background: var(--bg,#F6F1E9); color: var(--text,#1a1a1a); cursor: pointer; }
+    /* Horaires grid */
+    .horaires-table { width: 100%; border-collapse: collapse; }
+    .horaires-table th { padding: 8px 10px; text-align: center; font-size: 11px; font-weight: 700;
+      color: var(--text-muted,#94a3b8); text-transform: uppercase; letter-spacing: .05em; }
+    .horaires-table td { padding: 8px 6px; text-align: center; border-top: 1px solid var(--border,#f1f5f9); }
+    .horaires-time-wrap { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+    .horaires-time-wrap input[type=time] { font-size: 11px; padding: 3px 5px;
+      border: 1px solid var(--border,#e2e8f0); border-radius: 5px;
+      background: var(--bg,#F6F1E9); color: var(--text,#1a1a1a); width: 74px; }
+
     /* ── Dark mode overrides for Tailwind content areas ── */
     [data-theme="dark"] body { background: var(--bg); color: var(--text); }
     [data-theme="dark"] .kpi-card,
@@ -775,20 +827,13 @@
     <div class="max-w-2xl mx-auto px-4 py-6 pb-24">
 
       <!-- Tab switcher -->
-      <div class="flex items-center gap-3 mb-6">
+      <div class="flex items-center gap-3 mb-6 flex-wrap">
         <div class="flex bg-slate-100 rounded-xl p-1 gap-1">
-          <button id="stgTabGerant" onclick="setSettingsTab('gerant')"
-                  class="stg-tab on">
-            Gérant
-          </button>
-          <button id="stgTabTechnique" onclick="setSettingsTab('technique')"
-                  class="stg-tab">
-            Configuration technique
-          </button>
+          <button id="stgTabSalon"    onclick="setSettingsTab('salon')"    class="stg-tab on">Salon</button>
+          <button id="stgTabPlanning" onclick="setSettingsTab('planning')" class="stg-tab">Planning</button>
+          <button id="stgTabVocal"    onclick="setSettingsTab('vocal')"    class="stg-tab">Vocal</button>
+          <button id="stgTabSms"      onclick="setSettingsTab('sms')"      class="stg-tab">SMS</button>
         </div>
-        <span class="text-xs text-slate-400 ml-auto hidden sm:block">
-          Les modifications s'appliquent immédiatement
-        </span>
       </div>
 
       <!-- Technique warning banner (hidden on gérant tab) -->
@@ -1944,15 +1989,21 @@ function renderStats() {
 
 // ── Settings View ────────────────────────────────────────────────────
 let settingsData = [];
-let settingsTab = 'gerant';
+let settingsEmployees = [];
+let settingsServices = [];
+let settingsTab = 'salon';
 let techniqueUnlocked = false;
 
 function setSettingsTab(tab) {
   settingsTab = tab;
-  document.getElementById('stgTabGerant').classList.toggle('on', tab === 'gerant');
-  document.getElementById('stgTabTechnique').classList.toggle('on', tab === 'technique');
+  ['salon','planning','vocal','sms'].forEach(t => {
+    const btn = document.getElementById('stgTab' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (btn) btn.classList.toggle('on', t === tab);
+  });
   const banner = document.getElementById('stgTechBanner');
-  if (tab === 'technique') {
+  const sections = document.getElementById('settingsSections');
+  if (!sections) return;
+  if (tab === 'vocal' || tab === 'sms') {
     if (!techniqueUnlocked) {
       banner.classList.add('hidden');
       renderTechniqueLock();
@@ -1962,7 +2013,10 @@ function setSettingsTab(tab) {
   } else {
     banner.classList.add('hidden');
   }
-  renderSettingsView();
+  if (tab === 'salon')         renderSalonTab();
+  else if (tab === 'planning') renderPlanningTab();
+  else if (tab === 'vocal')    renderSettingsView();
+  else if (tab === 'sms')      renderSmsTab();
 }
 
 function renderTechniqueLock() {
@@ -2014,14 +2068,411 @@ async function loadSettingsView() {
   const p = new URLSearchParams();
   if (token) p.append('token', token);
   try {
-    const r = await fetch(`/api/v1/admin/settings?${p}`);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    settingsData = await r.json();
-    setSettingsTab('gerant'); // reset to gérant tab on load
+    const [settingsResp, empResp, svcResp] = await Promise.all([
+      fetch(`/api/v1/admin/settings?${p}`),
+      fetch(`/api/v1/admin/employees?${p}`),
+      fetch(`/api/v1/admin/services?${p}`),
+    ]);
+    if (!settingsResp.ok || !empResp.ok || !svcResp.ok) throw new Error('HTTP error');
+    settingsData = await settingsResp.json();
+    settingsEmployees = await empResp.json();
+    const svcData = await svcResp.json();
+    settingsServices = Array.isArray(svcData) ? svcData : (svcData.services || []);
+    setSettingsTab('salon');
   } catch {
     document.getElementById('settingsSections').innerHTML =
       '<p class="text-sm text-slate-400 text-center py-8">Erreur de chargement des paramètres.</p>';
   }
+}
+
+async function reloadEmployeesAndServices() {
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  const [empResp, svcResp] = await Promise.all([
+    fetch(`/api/v1/admin/employees?${p}`),
+    fetch(`/api/v1/admin/services?${p}`),
+  ]);
+  settingsEmployees = await empResp.json();
+  const svcData = await svcResp.json();
+  settingsServices = Array.isArray(svcData) ? svcData : (svcData.services || []);
+  if (settingsTab === 'salon') renderSalonTab();
+  else if (settingsTab === 'planning') renderPlanningTab();
+}
+
+function renderSalonTab() {
+  settingsTab = 'salon';
+  renderSettingsView(); // renders tab='salon' settings (infos générales)
+  const s = document.getElementById('settingsSections');
+  if (!s) return;
+  s.innerHTML += buildEquipeSection();
+  s.innerHTML += buildHorairesSection();
+  s.innerHTML += buildServicesSection();
+  attachSalonTabEvents();
+}
+
+function buildEquipeSection() {
+  let rows = '';
+  settingsEmployees.forEach((emp, idx) => {
+    const c = PALETTE[idx % PALETTE.length];
+    rows += `<tr>
+      <td><span class="emp-color-dot" style="background:${c.bg}"></span>${emp.prenom} ${emp.nom}</td>
+      <td class="text-slate-500">${emp.role || '—'}</td>
+      <td><div class="crud-actions">
+        <button class="btn-icon-sm emp-edit-btn" data-emp-id="${emp.id}" title="Modifier">✏️</button>
+        <button class="btn-icon-sm danger emp-del-btn" data-emp-id="${emp.id}" title="Supprimer">🗑️</button>
+      </div></td>
+    </tr>`;
+  });
+  if (!rows) rows = '<tr><td colspan="3" class="text-slate-400 text-sm py-4 text-center">Aucun coiffeur enregistré.</td></tr>';
+  return `<div class="settings-section">
+    <div class="settings-section-title">Équipe</div>
+    <table class="crud-table">
+      <thead><tr><th>Coiffeur·se</th><th>Rôle</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <button class="add-row-btn" onclick="openAddEmployeeForm()">+ Ajouter un·e coiffeur·se</button>
+  </div>`;
+}
+
+function buildHorairesSection() {
+  const raw = settingsData.find(s => s.key === 'OPENING_HOURS')?.value || '';
+  let hours = {};
+  try { hours = raw ? JSON.parse(raw) : {}; } catch {}
+  const days = ['lun','mar','mer','jeu','ven','sam','dim'];
+  const labels = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+  const defaults = { lun:true, mar:true, mer:true, jeu:true, ven:true, sam:false, dim:false };
+  let cells = '';
+  days.forEach((d, i) => {
+    const v = hours[d] || { active: defaults[d], start:'09:00', end:'19:00' };
+    cells += `<td>
+      <div class="horaires-time-wrap">
+        <label class="toggle"><input type="checkbox" id="h_check_${d}" ${v.active ? 'checked' : ''}
+          onchange="toggleHorairesDay('${d}')"><span class="toggle-slider"></span></label>
+        <div id="h_times_${d}" style="${v.active ? '' : 'display:none'}">
+          <input type="time" id="h_start_${d}" value="${v.start || '09:00'}">
+          <input type="time" id="h_end_${d}" value="${v.end || '19:00'}">
+        </div>
+      </div>
+    </td>`;
+  });
+  const headers = labels.map(l => `<th>${l}</th>`).join('');
+  return `<div class="settings-section">
+    <div class="settings-section-title">Horaires d'ouverture</div>
+    <div style="overflow-x:auto">
+    <table class="horaires-table">
+      <thead><tr>${headers}</tr></thead>
+      <tbody><tr>${cells}</tr></tbody>
+    </table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+      <button class="save-section-btn" style="width:auto;padding:8px 20px" onclick="saveOpeningHours()">Enregistrer les horaires</button>
+    </div>
+  </div>`;
+}
+
+function buildServicesSection() {
+  let rows = '';
+  settingsServices.forEach(svc => {
+    rows += `<tr>
+      <td>${svc.label}</td>
+      <td class="text-slate-500">${svc.duree_min} min</td>
+      <td class="text-slate-500">${svc.prix_eur > 0 ? svc.prix_eur + ' €' : '—'}</td>
+      <td class="text-slate-400 text-xs">${svc.category_label || '—'}</td>
+      <td><div class="crud-actions">
+        <button class="btn-icon-sm svc-edit-btn" data-svc-id="${svc.id}" title="Modifier">✏️</button>
+        <button class="btn-icon-sm danger svc-del-btn" data-svc-id="${svc.id}" title="Supprimer">🗑️</button>
+      </div></td>
+    </tr>`;
+  });
+  if (!rows) rows = '<tr><td colspan="5" class="text-slate-400 text-sm py-4 text-center">Aucun service enregistré.</td></tr>';
+  return `<div class="settings-section">
+    <div class="settings-section-title">Services</div>
+    <table class="crud-table">
+      <thead><tr><th>Prestation</th><th>Durée</th><th>Prix</th><th>Catégorie</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <button class="add-row-btn" onclick="openAddServiceForm()">+ Ajouter un service</button>
+  </div>`;
+}
+
+function attachSalonTabEvents() {
+  document.querySelectorAll('.emp-edit-btn').forEach(btn => {
+    btn.onclick = () => openEditEmployeeForm(btn.dataset.empId);
+  });
+  document.querySelectorAll('.emp-del-btn').forEach(btn => {
+    btn.onclick = () => deleteEmployee(btn.dataset.empId);
+  });
+  document.querySelectorAll('.svc-edit-btn').forEach(btn => {
+    btn.onclick = () => openEditServiceForm(btn.dataset.svcId);
+  });
+  document.querySelectorAll('.svc-del-btn').forEach(btn => {
+    btn.onclick = () => deleteService(btn.dataset.svcId);
+  });
+}
+
+function toggleHorairesDay(day) {
+  const check = document.getElementById(`h_check_${day}`);
+  const times = document.getElementById(`h_times_${day}`);
+  if (times) times.style.display = check?.checked ? '' : 'none';
+}
+
+function saveOpeningHours() {
+  const days = ['lun','mar','mer','jeu','ven','sam','dim'];
+  const hours = {};
+  days.forEach(d => {
+    const check = document.getElementById(`h_check_${d}`);
+    const start = document.getElementById(`h_start_${d}`);
+    const end   = document.getElementById(`h_end_${d}`);
+    hours[d] = { active: check?.checked || false, start: start?.value || '09:00', end: end?.value || '19:00' };
+  });
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  fetch(`/api/v1/admin/settings?${p}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ OPENING_HOURS: JSON.stringify(hours) }),
+  }).then(r => { if (r.ok) showToast('Horaires enregistrés ✓'); });
+}
+
+// ── Planning Tab ───────────────────────────────────────────────────────
+
+function renderPlanningTab() {
+  const days = ['lun','mar','mer','jeu','ven','sam','dim'];
+  const dayLabels = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+  if (!settingsEmployees.length) {
+    document.getElementById('settingsSections').innerHTML =
+      '<div class="settings-section"><p class="text-sm text-slate-400 text-center py-8">Aucun coiffeur enregistré. Ajoutez des coiffeurs dans l\'onglet Salon.</p></div>';
+    return;
+  }
+  let rows = '';
+  settingsEmployees.forEach((emp, idx) => {
+    const c = PALETTE[idx % PALETTE.length];
+    let schedule = {};
+    try { schedule = JSON.parse(emp.horaires_json || '{}'); } catch {}
+    let dayCells = '';
+    days.forEach(d => {
+      const v = schedule[d] || { active: false, start: '09:00', end: '19:00' };
+      dayCells += `<td class="planning-day-cell">
+        <div class="planning-day-toggle">
+          <label class="toggle"><input type="checkbox" class="day-check" data-day="${d}" ${v.active ? 'checked' : ''}
+            onchange="togglePlanningCell(this)"><span class="toggle-slider"></span></label>
+          <div class="planning-time-inputs" style="${v.active ? '' : 'display:none'}">
+            <input type="time" class="day-start" data-day="${d}" value="${v.start || '09:00'}">
+            <input type="time" class="day-end"   data-day="${d}" value="${v.end   || '19:00'}">
+          </div>
+        </div>
+      </td>`;
+    });
+    rows += `<tr data-emp-id="${emp.id}">
+      <td style="padding:8px 4px 8px 0">
+        <span class="emp-color-dot" style="background:${c.bg}"></span>
+        <span style="font-size:13px;font-weight:600">${emp.prenom}</span>
+      </td>
+      ${dayCells}
+    </tr>`;
+  });
+  const headers = dayLabels.map(l => `<th>${l}</th>`).join('');
+  document.getElementById('settingsSections').innerHTML = `
+    <div class="settings-section">
+      <div class="settings-section-title">Planning hebdomadaire de l'équipe</div>
+      <div style="overflow-x:auto">
+      <table class="planning-table">
+        <thead><tr><th style="text-align:left">Coiffeur·se</th>${headers}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      </div>
+      <div class="planning-save-row">
+        <button class="save-section-btn" style="width:auto;padding:8px 20px" onclick="savePlanning()">Enregistrer le planning</button>
+      </div>
+    </div>`;
+}
+
+function togglePlanningCell(checkbox) {
+  const row = checkbox.closest('tr');
+  const day = checkbox.dataset.day;
+  const wrap = row.querySelector(`.planning-time-inputs[data-day="${day}"]`) ||
+               checkbox.closest('.planning-day-toggle').querySelector('.planning-time-inputs');
+  if (wrap) wrap.style.display = checkbox.checked ? '' : 'none';
+}
+
+async function savePlanning() {
+  const rows = document.querySelectorAll('#settingsSections [data-emp-id]');
+  const days = ['lun','mar','mer','jeu','ven','sam','dim'];
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  const promises = [];
+  rows.forEach(row => {
+    const empId = row.dataset.empId;
+    const schedule = {};
+    days.forEach(d => {
+      const check = row.querySelector(`.day-check[data-day="${d}"]`);
+      const start = row.querySelector(`.day-start[data-day="${d}"]`);
+      const end   = row.querySelector(`.day-end[data-day="${d}"]`);
+      schedule[d] = { active: check?.checked || false, start: start?.value || '09:00', end: end?.value || '19:00' };
+    });
+    promises.push(
+      fetch(`/api/v1/employees/${empId}?${p}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ horaires_json: JSON.stringify(schedule) }),
+      })
+    );
+  });
+  await Promise.all(promises);
+  showToast('Planning enregistré ✓');
+  const empResp = await fetch(`/api/v1/admin/employees?${p}`);
+  settingsEmployees = await empResp.json();
+}
+
+// ── SMS Tab ────────────────────────────────────────────────────────────
+
+function renderSmsTab() {
+  settingsTab = 'sms';
+  renderSettingsView(); // renders tab='sms' settings (templates + rappels)
+  const s = document.getElementById('settingsSections');
+  if (!s) return;
+  s.innerHTML = buildSmsPreview() + s.innerHTML;
+  s.querySelectorAll('textarea[id^="stg_SMS_"]').forEach(ta => {
+    ta.addEventListener('input', updateSmsPreview);
+  });
+  updateSmsPreview();
+}
+
+function buildSmsPreview() {
+  return `<div class="sms-preview-panel">
+    <div class="sms-preview-title">Aperçu du message</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--text-muted,#94a3b8)">Template :</span>
+      <select class="sms-preview-select" id="smsPreviewSelect" onchange="updateSmsPreview()">
+        <option value="SMS_REMINDER_TEMPLATE">Rappel J-1</option>
+        <option value="SMS_CONFIRMATION_TEMPLATE">Confirmation RDV</option>
+        <option value="SMS_CANCEL_TEMPLATE">Annulation</option>
+      </select>
+    </div>
+    <div class="sms-preview-bubble" id="smsPreviewBubble">—</div>
+  </div>`;
+}
+
+function updateSmsPreview() {
+  const key = document.getElementById('smsPreviewSelect')?.value || 'SMS_REMINDER_TEMPLATE';
+  const ta = document.getElementById(`stg_${key}`);
+  let tpl = ta?.value || settingsData.find(s => s.key === key)?.value || '';
+  const vars = { client_name: 'Marie Dupont', date: 'lundi 24 mars', heure: '14h30', prestation: 'Coupe + brushing', coiffeur: 'Hugo' };
+  Object.entries(vars).forEach(([k, v]) => { tpl = tpl.replaceAll(`{${k}}`, v); });
+  const bubble = document.getElementById('smsPreviewBubble');
+  if (bubble) bubble.textContent = tpl || '(template vide)';
+}
+
+// ── Employee & Service CRUD ────────────────────────────────────────────
+
+function openAddEmployeeForm() {
+  const prenom = prompt('Prénom du·de la coiffeur·se :');
+  if (!prenom?.trim()) return;
+  const nom = prompt('Nom de famille :') || '';
+  addEmployee(prenom.trim(), nom.trim());
+}
+
+async function addEmployee(prenom, nom) {
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  const r = await fetch(`/api/v1/employees?${p}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prenom, nom, role: '', horaires_json: '{}', notes: '' }),
+  });
+  if (!r.ok) { showToast('Erreur lors de la création'); return; }
+  await reloadEmployeesAndServices();
+  showToast(`${prenom} ajouté·e ✓`);
+}
+
+function openEditEmployeeForm(id) {
+  const emp = settingsEmployees.find(e => e.id === id);
+  if (!emp) return;
+  const prenom = prompt('Prénom :', emp.prenom);
+  if (!prenom?.trim()) return;
+  const nom   = prompt('Nom :', emp.nom) ?? emp.nom;
+  const role  = prompt('Rôle (ex: Coloriste) :', emp.role || '') ?? emp.role;
+  editEmployee(id, prenom.trim(), nom.trim(), role.trim());
+}
+
+async function editEmployee(id, prenom, nom, role) {
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  const r = await fetch(`/api/v1/employees/${id}?${p}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prenom, nom, role }),
+  });
+  if (!r.ok) { showToast('Erreur lors de la modification'); return; }
+  await reloadEmployeesAndServices();
+  showToast('Coiffeur·se mis·e à jour ✓');
+}
+
+async function deleteEmployee(id) {
+  const emp = settingsEmployees.find(e => e.id === id);
+  if (!confirm(`Supprimer ${emp?.prenom || 'cet·te employé·e'} ? Cette action est irréversible.`)) return;
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  const r = await fetch(`/api/v1/employees/${id}?${p}`, { method: 'DELETE' });
+  if (!r.ok) { showToast('Erreur lors de la suppression'); return; }
+  await reloadEmployeesAndServices();
+  showToast('Coiffeur·se supprimé·e ✓');
+}
+
+function openAddServiceForm() {
+  const label = prompt('Nom de la prestation :');
+  if (!label?.trim()) return;
+  const dureeStr = prompt('Durée (en minutes) :', '30') || '30';
+  const prixStr  = prompt('Prix (€) :', '0') || '0';
+  const cat      = prompt('Catégorie :', 'Prestation') || 'Prestation';
+  addService({ label: label.trim(), duree_min: parseInt(dureeStr), prix_eur: parseFloat(prixStr), category_label: cat.trim(), category_id: cat.trim().toLowerCase().replace(/\s+/g, '-') });
+}
+
+async function addService(data) {
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  const r = await fetch(`/api/v1/services?${p}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!r.ok) { showToast('Erreur lors de la création'); return; }
+  await reloadEmployeesAndServices();
+  showToast('Service ajouté ✓');
+}
+
+function openEditServiceForm(id) {
+  const svc = settingsServices.find(s => s.id === id);
+  if (!svc) return;
+  const label    = prompt('Nom :', svc.label);
+  if (!label?.trim()) return;
+  const dureeStr = prompt('Durée (min) :', String(svc.duree_min)) || String(svc.duree_min);
+  const prixStr  = prompt('Prix (€) :', String(svc.prix_eur)) || String(svc.prix_eur);
+  editService(id, { label: label.trim(), duree_min: parseInt(dureeStr), prix_eur: parseFloat(prixStr) });
+}
+
+async function editService(id, data) {
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  const r = await fetch(`/api/v1/services/${id}?${p}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!r.ok) { showToast('Erreur lors de la modification'); return; }
+  await reloadEmployeesAndServices();
+  showToast('Service mis à jour ✓');
+}
+
+async function deleteService(id) {
+  const svc = settingsServices.find(s => s.id === id);
+  if (!confirm(`Supprimer "${svc?.label || 'ce service'}" ? Cette action est irréversible.`)) return;
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  const r = await fetch(`/api/v1/services/${id}?${p}`, { method: 'DELETE' });
+  if (!r.ok) { showToast('Erreur lors de la suppression'); return; }
+  await reloadEmployeesAndServices();
+  showToast('Service supprimé ✓');
 }
 
 // ── Sessions View ─────────────────────────────────────────────────────
