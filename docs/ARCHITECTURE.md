@@ -1,225 +1,184 @@
-# Architecture — Agent Vocal de Prise de RDV
+# Architecture — Agent Vocal de Prise de RDV (Maison Éclat)
+
+> Dernière mise à jour : 2026-03-19. Ce document reflète l'état **implémenté et en production**.
+
+---
 
 ## Vue d'ensemble
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        CLIENT (téléphone)                          │
-│                     Appel entrant / sortant                        │
+│                        CLIENT (téléphone)                           │
+│                         Appel entrant                               │
 └──────────────────────────┬──────────────────────────────────────────┘
-                           │ SIP/WebRTC
+                           │ Webhook TwiML
                            ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│                     COUCHE TÉLÉPHONIE                                │
-│                                                                      │
-│  Twilio / Vonage / Vapi                                              │
+│                     TWILIO (téléphonie)                              │
 │  - Réception appel                                                   │
-│  - Gestion session audio bidirectionnelle                            │
-│  - Détection silence / barge-in                                      │
-│  - Webhook événements (call.started, call.ended)                     │
+│  - STT natif Twilio (transcription)                                  │
+│  - Lecture audio (<Play> vers URL servée par le backend)             │
+│  - Raccroché sur instruction TwiML                                   │
+│  - SMS sortants (confirmation + rappels J-1)                         │
 └──────────────────────────┬───────────────────────────────────────────┘
-                           │ Audio stream (WebSocket)
+                           │ HTTP webhook (POST /api/v1/twilio/*)
                            ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│                     PIPELINE VOCAL                                   │
+│                     BACKEND FastAPI                                  │
 │                                                                      │
-│  ┌─────────┐    ┌─────────────┐    ┌─────────┐                      │
-│  │  STT    │───▶│  LLM Agent  │───▶│  TTS    │                      │
-│  │         │    │             │    │         │                      │
-│  │Deepgram │    │ Claude /    │    │ElevenLabs│                      │
-│  │Whisper  │    │ GPT-4o     │    │PlayHT   │                      │
-│  │Google   │    │            │    │Google   │                      │
-│  └─────────┘    └──────┬──────┘    └─────────┘                      │
-│                        │                                             │
-│  Latence cible : < 800ms bout-en-bout (STT+LLM+TTS)                │
-└────────────────────────┼─────────────────────────────────────────────┘
-                         │ Function calls / Tool use
-                         ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                     MOTEUR DE RÉSERVATION (API)                      │
+│  app/routers/twilio_router.py   — Webhook Twilio, TwiML builder      │
+│  app/routers/voice.py           — Sessions vocales, turns            │
+│  app/routers/bookings.py        — CRUD réservations                  │
+│  app/routers/availability.py    — Recherche créneaux dispo           │
+│  app/routers/admin.py           — Dashboard API (token-protégé)      │
+│  app/routers/ops.py             — Métriques, diagnostics             │
+│  app/routers/telephony.py       — Pilote téléphonie abstrait         │
 │                                                                      │
-│  FastAPI / Express.js                                                │
+│  app/llm_conversation.py        — Moteur GPT-4o-mini (OpenAI)        │
+│  app/tts_elevenlabs.py          — Synthèse ElevenLabs                │
+│  app/audio_store.py             — Cache audio local (warm greeting)  │
+│  app/sms_sender.py              — SMS via Twilio REST                │
+│  app/reminder.py                — Boucle rappels J-1                 │
+│  app/purge.py                   — Boucle purge RGPD nightly          │
+│  app/session_store.py           — Persistence sessions en DB         │
+│  app/settings_service.py        — Paramètres runtime DB-backed       │
 │                                                                      │
-│  Endpoints :                                                         │
-│  ┌────────────────────────────────────────────────────────────┐       │
-│  │ POST /api/v1/availability/search                          │       │
-│  │   → Cherche créneaux dispo selon service + date + prefs   │       │
-│  │                                                            │       │
-│  │ POST /api/v1/bookings                                     │       │
-│  │   → Crée un RDV (verrouillage optimiste)                  │       │
-│  │                                                            │       │
-│  │ GET  /api/v1/bookings/:id                                 │       │
-│  │   → Détail d'un RDV existant                              │       │
-│  │                                                            │       │
-│  │ PATCH /api/v1/bookings/:id                                │       │
-│  │   → Modification (date, service, annulation)              │       │
-│  │                                                            │       │
-│  │ GET  /api/v1/services                                     │       │
-│  │   → Catalogue des prestations                             │       │
-│  │                                                            │       │
-│  │ GET  /api/v1/employees                                    │       │
-│  │   → Liste coiffeurs + compétences                         │       │
-│  └────────────────────────────────────────────────────────────┘       │
-│                                                                      │
-│  Logique métier :                                                    │
-│  - Matching service → employés compétents                            │
-│  - Calcul durée (service + longueur + modificateurs)                 │
-│  - Recherche créneaux libres (employee.horaires ∩ salon.ouverture)   │
-│  - Application buffers inter-RDV                                     │
-│  - Gestion conflits (double-booking prevention via lock)             │
-│  - Fallback si aucun créneau                                        │
-└──────────────────────────┬───────────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                     COUCHE DONNÉES                                   │
-│                                                                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
-│  │  PostgreSQL  │  │    Redis     │  │   S3/Minio   │               │
-│  │              │  │              │  │              │               │
-│  │ - bookings   │  │ - locks RDV  │  │ - logs audio │               │
-│  │ - employees  │  │ - sessions   │  │ - transcripts│               │
-│  │ - services   │  │ - cache dispo│  │              │               │
-│  │ - clients    │  │              │  │              │               │
-│  │ - audit_log  │  │              │  │              │               │
-│  └──────────────┘  └──────────────┘  └──────────────┘               │
-└──────────────────────────────────────────────────────────────────────┘
+└──────────────┬────────────────────────────┬─────────────────────────┘
+               │ SQLAlchemy async            │ httpx
+               ▼                             ▼
+┌──────────────────────┐        ┌────────────────────────────┐
+│  PostgreSQL (prod)   │        │  APIs externes             │
+│  SQLite (dev)        │        │  - OpenAI (GPT-4o-mini)    │
+│                      │        │  - ElevenLabs TTS          │
+│  Tables :            │        │  - Twilio REST (SMS)       │
+│  - services          │        │  - Resend (email)          │
+│  - employees         │        └────────────────────────────┘
+│  - employee_         │
+│    competencies      │
+│  - bookings          │
+│  - voice_sessions    │
+│  - transcript_events │
+│  - callback_requests │
+│  - salon_settings    │
+└──────────────────────┘
 ```
 
-## Flux détaillé d'un appel
+---
 
-### 1. Accueil et identification
+## Stack technique (implémenté)
 
-```
-Client appelle → Twilio décroche → TTS : "Bonjour, Maison Éclat, comment puis-je vous aider ?"
-                                   STT écoute la réponse
-```
+| Composant | Choix retenu |
+|---|---|
+| Téléphonie | **Twilio** (webhook TwiML) |
+| STT | **Twilio natif** (transcription incluse dans le webhook) |
+| LLM | **GPT-4o-mini** (OpenAI) avec function calling |
+| TTS | **ElevenLabs** `eleven_flash_v2_5` — voix "Marine" |
+| Backend | **FastAPI** (Python 3.12, uvicorn) |
+| Base de données | **PostgreSQL** (prod) / SQLite (dev) via SQLAlchemy async |
+| SMS | **Twilio REST** (via httpx, module `app/sms_sender.py`) |
+| Email | **Resend** (notifications gérant) |
+| Déploiement | VPS Linux, systemd, reverse proxy nginx |
+| Dashboard | SPA vanilla JS + Tailwind CDN + Lucide icons |
 
-### 2. Compréhension de l'intention
+---
 
-Le LLM analyse la transcription et identifie :
-- **Intent** : `book_appointment` | `modify_appointment` | `cancel_appointment` | `get_info` | `transfer_human`
-- **Entities** : service demandé, date/heure souhaitée, coiffeur préféré, longueur cheveux
-
-### 3. Recherche de disponibilité
-
-```
-LLM → function_call: search_availability({
-  service_id: "balayage_mi_long",
-  date_souhaitee: "2026-03-14",
-  heure_pref: "14:00",
-  employee_pref: "emp_03"  // optionnel
-})
-
-API → Algorithme :
-  1. Filtrer employés compétents pour "balayage_mi_long"
-     → [emp_01 (Sophie), emp_03 (Léa)]
-  2. Calculer durée = 150min (base) + 0 (pas de modificateur)
-  3. Ajouter buffer = 15min (prestation chimique)
-  4. Chercher slots libres de 165min dans planning de chaque employé
-  5. Retourner top 3 créneaux les plus proches
-```
-
-### 4. Proposition et confirmation
+## Flux d'un appel entrant
 
 ```
-API retourne → [{employee: "Léa", date: "2026-03-14", heure: "14:00"},
-                {employee: "Sophie", date: "2026-03-14", heure: "15:30"},
-                {employee: "Léa", date: "2026-03-15", heure: "10:00"}]
-
-LLM → TTS : "J'ai un créneau avec Léa le samedi 14 mars à 14h
-              pour votre balayage. Ça dure environ 2h30.
-              Est-ce que ça vous convient ?"
+1. Client appelle le numéro Twilio
+2. Twilio envoie POST /api/v1/twilio/voice (webhook)
+3. Le backend répond TwiML <Gather> → Twilio écoute et transcrit
+4. Twilio envoie POST /api/v1/twilio/gather avec le transcript
+5. Le backend :
+   a. Charge/crée la VoiceSession en base
+   b. Passe le transcript à GPT-4o-mini (avec historique messages_json)
+   c. Si function call : exécute (search_availability, create_booking, etc.)
+   d. Génère la réponse TTS via ElevenLabs → fichier audio servi sous /audio/
+   e. Répond TwiML <Play> (URL audio) + <Gather> (prochain tour)
+6. Si create_booking réussi :
+   a. Raccroche proprement (TwiML <Hangup>)
+   b. Envoie SMS de confirmation au client (si opt-in)
+   c. Envoie SMS/email au gérant (OWNER_PHONE, SALON_EMAIL)
 ```
 
-### 5. Confirmation et réservation
+---
 
-```
-Client : "Oui c'est parfait"
-STT → LLM détecte confirmation
-LLM → function_call: create_booking({...})
-API → Verrouille créneau + insère en base
-LLM → TTS : "C'est réservé ! Léa vous attend le samedi 14 mars
-              à 14h. Vous recevrez une confirmation par SMS.
-              Bonne journée !"
-```
+## Dashboard admin (`/admin`)
 
-## Modèle de données simplifié
+SPA statique servie par FastAPI StaticFiles. Toutes les routes API sont prefixées `/api/v1/admin/` et protégées par token (`?token=VOICE_API_KEY`).
+
+| Endpoint | Usage |
+|---|---|
+| `GET /admin/bookings` | Lister RDV à venir / historique |
+| `POST /api/v1/bookings` | Créer RDV manuellement |
+| `DELETE /api/v1/bookings/{id}` | Annuler un RDV |
+| `GET /admin/callbacks` | Demandes de rappel vocal |
+| `PATCH /admin/callbacks/{id}` | Mettre à jour statut/notes |
+| `GET /admin/sessions` | Lister les sessions vocales |
+| `GET /admin/sessions/{id}` | Détail + transcript d'une session |
+| `GET /admin/stats` | Stats mensuelles agrégées |
+| `GET /admin/settings` | Lire les paramètres runtime |
+| `PATCH /admin/settings` | Modifier les paramètres runtime |
+| `GET /admin/services` | Catalogue prestations (pour formulaires) |
+| `GET /admin/employees` | Liste employés (pour formulaires) |
+
+---
+
+## Modèle de données
 
 ```sql
--- Table bookings
-CREATE TABLE bookings (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_phone  VARCHAR(20) NOT NULL,
-  client_name   VARCHAR(100),
-  employee_id   VARCHAR(10) REFERENCES employees(id),
-  service_id    VARCHAR(50) NOT NULL,
-  start_at      TIMESTAMPTZ NOT NULL,
-  end_at        TIMESTAMPTZ NOT NULL,
-  duration_min  INT NOT NULL,
-  status        VARCHAR(20) DEFAULT 'confirmed',  -- confirmed|cancelled|completed|no_show
-  source        VARCHAR(20) DEFAULT 'vocal_agent', -- vocal_agent|web|manual
-  created_at    TIMESTAMPTZ DEFAULT now(),
-  notes         TEXT,
-  CONSTRAINT no_overlap EXCLUDE USING gist (
-    employee_id WITH =,
-    tstzrange(start_at, end_at) WITH &&
-  )
-);
+-- Réservations
+bookings (id, client_name, client_phone, employee_id, service_id,
+          start_time, end_time, status, notes, reminder_sent, created_at)
 
--- Exclusion constraint empêche tout chevauchement pour un même employé
+-- Sessions vocales
+voice_sessions (session_id, status, turns, client_name, client_phone,
+                channel, current_intent, booking_draft_json,
+                messages_json, created_at, last_activity)
+
+-- Transcripts (1 ligne = 1 tour)
+transcript_events (id, session_id, turn_number, user_text, intent,
+                   confidence, response_text, action_taken, is_fallback)
+
+-- Demandes de rappel (voicemail)
+callback_requests (id, caller_phone, recording_url, recording_duration,
+                   transcription, status, notes, created_at)
+
+-- Paramètres runtime (override env vars)
+salon_settings (key, value, updated_at)
 ```
 
-## Stack technique recommandée
+---
 
-| Composant | Option principale | Alternative |
-|---|---|---|
-| Téléphonie | Vapi (tout-en-un vocal) | Twilio + assembly maison |
-| STT | Deepgram Nova-2 | Whisper large-v3 |
-| LLM | Claude 3.5 Sonnet (tool use) | GPT-4o |
-| TTS | ElevenLabs Turbo v2.5 | PlayHT 2.0 |
-| Backend API | FastAPI (Python) | Express.js (Node) |
-| Base de données | PostgreSQL 16 | - |
-| Cache/Locks | Redis | - |
-| Hébergement | Railway / Fly.io | AWS ECS |
-| SMS confirmation | Twilio SMS | OVH SMS |
-| Monitoring | Langfuse + Sentry | Datadog |
+## Paramètres runtime
 
-## Considérations de latence
+Les paramètres sont stockés dans `salon_settings` et chargés au démarrage via `settings_service.load_settings_from_db()`. Toute modification via `PATCH /admin/settings` est appliquée immédiatement en mémoire — pas de redémarrage requis.
 
-| Étape | Cible | Technique |
-|---|---|---|
-| STT | < 300ms | Streaming Deepgram, endpointing agressif |
-| LLM | < 400ms | Streaming, prompt court, tool use |
-| TTS | < 200ms | Streaming ElevenLabs, voix pré-chargée |
-| **Total** | **< 900ms** | **Conversation naturelle** |
+| Groupe | Clés |
+|---|---|
+| Salon & Gérant | OWNER_PHONE, SALON_EMAIL, SALON_EMAIL_FROM |
+| SMS | TWILIO_PHONE_NUMBER, TWILIO_TRANSFER_NUMBER |
+| Rappels | REMINDER_ENABLED, REMINDER_HOUR |
+| RGPD | SESSION_RETENTION_DAYS, CALLBACK_RETENTION_DAYS, PURGE_HOUR |
+| Twilio (sensible) | TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN |
+| Email (sensible) | RESEND_API_KEY |
+| ElevenLabs (sensible) | ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID |
+| Sécurité (sensible) | VOICE_API_KEY |
 
-## Sécurité et conformité
+---
 
-- **RGPD** : Consentement enregistrement vocal au début de l'appel. Droit à l'effacement des données vocales.
-- **Données personnelles** : Téléphone et nom stockés chiffrés (AES-256). Pas de stockage carte bancaire.
-- **Audit** : Chaque action de l'agent est loguée avec timestamp et transcription.
-- **Fallback humain** : Transfert vers le salon à tout moment si le client dit "je veux parler à quelqu'un".
+## Ce qui n'est PAS utilisé (décisions de simplification)
 
-## Diagramme de séquence — Réservation standard
+- **Redis** — pas de cache distribué ni de locks Redis. La prévention des double-bookings est gérée par les contraintes SQLAlchemy + logique applicative.
+- **Deepgram / Whisper** — STT natif Twilio suffit pour le cas d'usage.
+- **Vapi** — architecture Twilio directe retenue.
+- **S3 / Minio** — les fichiers audio TTS sont stockés localement (`AUDIO_DIR`), purgés automatiquement.
+- **Langfuse / Sentry** — métriques in-memory via `app/observability.py`, endpoint `/ops/metrics`.
 
-```
-Client          Twilio/Vapi      STT         LLM          API           TTS
-  │                │              │           │            │              │
-  │── Appel ──────▶│              │           │            │              │
-  │                │──audio──────▶│           │            │              │
-  │                │              │──text────▶│            │              │
-  │                │              │           │──intent───▶│              │
-  │                │              │           │            │──search──┐   │
-  │                │              │           │            │◀─slots───┘   │
-  │                │              │           │◀─result────│              │
-  │                │              │           │──speech───▶│          ───▶│
-  │◀──────────────────────────────────────────────────────────── audio───│
-  │                │              │           │            │              │
-  │── "oui" ──────▶│──audio──────▶│──text────▶│            │              │
-  │                │              │           │──book─────▶│              │
-  │                │              │           │◀─confirm───│              │
-  │                │              │           │──speech──────────────────▶│
-  │◀──────────────────────────────────────────────────────────── audio───│
-  │                │              │           │            │──SMS────────▶│
-```
+---
+
+## Prochaines évolutions envisagées
+
+1. **Canal WhatsApp** — Twilio WhatsApp Business API ou migration Bird (EU-native)
+2. **Multi-salon** — externaliser nom/adresse/horaires en config par client
+3. **Annulation vocale** — ajouter function call `cancel_booking` dans le LLM
