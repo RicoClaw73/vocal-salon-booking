@@ -14,7 +14,7 @@ Never raises — a failed SMS must never block the booking confirmation.
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
 
 import httpx
 
@@ -54,11 +54,14 @@ def _build_sms(
     date_fr = _format_date_fr(date_str, time_str)
     emp_first = emp_name.split()[0] if emp_name else emp_name
     svc_short = svc_label[:28] + "…" if len(svc_label) > 28 else svc_label
+    salon_name = settings.SALON_NAME_SHORT or settings.SALON_NAME
+    salon_addr = settings.SALON_ADDRESS_SHORT
+    addr_line = f"{salon_addr}\n" if salon_addr else ""
     body = (
-        f"Maison Eclat - RDV #{booking_id}\n"
+        f"{salon_name} - RDV #{booking_id}\n"
         f"{svc_short} avec {emp_first}\n"
         f"{date_fr}\n"
-        f"42 r. des Petits-Champs, Paris 2e\n"
+        f"{addr_line}"
         f"Modif/annul: rappeler le salon."
     )
     return body[:160]
@@ -77,11 +80,14 @@ def _build_reminder_sms(
     # "Demain" replaces the full date to save chars and sound natural
     day_label = date_fr.split(" à ")[0]  # e.g. "Vendredi 20 mars"
     time_label = date_fr.split(" à ")[1] if " à " in date_fr else time_str
+    salon_name = settings.SALON_NAME_SHORT or settings.SALON_NAME
+    salon_addr = settings.SALON_ADDRESS_SHORT
+    addr_line = f"{salon_addr}\n" if salon_addr else ""
     body = (
-        f"Maison Eclat - Rappel RDV\n"
+        f"{salon_name} - Rappel RDV\n"
         f"{svc_short} avec {emp_first}\n"
         f"Demain {day_label} à {time_label}\n"
-        f"42 r. des Petits-Champs, Paris 2e\n"
+        f"{addr_line}"
         f"Modif/annul: rappeler le salon."
     )
     return body[:160]
@@ -136,6 +142,62 @@ async def send_owner_cancel_alert(
         return False
     except Exception as exc:
         logger.warning("Cancel alert SMS error: %s", exc)
+        return False
+
+
+async def send_owner_reschedule_alert(
+    booking_id: int,
+    client_name: str,
+    client_phone: str | None,
+    old_start: datetime,
+    new_start: datetime,
+) -> bool:
+    """
+    Send a brief SMS alert to the salon owner when a booking is rescheduled.
+    Returns True on success, False on failure. Never raises.
+    """
+    sid = settings.TWILIO_ACCOUNT_SID
+    token = settings.TWILIO_AUTH_TOKEN
+    from_number = settings.TWILIO_PHONE_NUMBER
+    owner = settings.OWNER_PHONE
+
+    if not (sid and token and from_number and owner):
+        logger.debug("Reschedule alert SMS skipped: credentials or OWNER_PHONE not configured")
+        return False
+
+    try:
+        old_display = old_start.strftime("%d/%m à %Hh%M")
+        new_display = new_start.strftime("%d/%m à %Hh%M")
+    except Exception:
+        old_display = str(old_start)
+        new_display = str(new_start)
+
+    phone_line = f"\nTel: {client_phone}" if client_phone else ""
+    body = (
+        f"[Report RDV #{booking_id}]\n"
+        f"Client: {client_name}{phone_line}\n"
+        f"De: {old_display}\n"
+        f"À: {new_display}"
+    )[:160]
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(
+                url,
+                data={"From": from_number, "To": owner, "Body": body},
+                auth=(sid, token),
+            )
+        if resp.status_code in (200, 201):
+            logger.info("Reschedule alert SMS sent for booking #%d", booking_id)
+            return True
+        logger.warning("Reschedule alert SMS HTTP %d: %s", resp.status_code, resp.text[:200])
+        return False
+    except httpx.TimeoutException:
+        logger.warning("Reschedule alert SMS timeout for booking #%d", booking_id)
+        return False
+    except Exception as exc:
+        logger.warning("Reschedule alert SMS error: %s", exc)
         return False
 
 

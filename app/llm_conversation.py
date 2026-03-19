@@ -35,7 +35,12 @@ from app.models import Booking, BookingStatus, Employee, EmployeeCompetency, Ser
 from app.salon_info import get_info_response
 from app.slot_engine import find_available_slots, validate_booking_request
 from app.email_sender import send_owner_booking_email
-from app.sms_sender import send_booking_confirmation, send_owner_booking_alert, send_owner_cancel_alert
+from app.sms_sender import (
+    send_booking_confirmation,
+    send_owner_booking_alert,
+    send_owner_cancel_alert,
+    send_owner_reschedule_alert,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +57,7 @@ _DATA_DIR = Path(__file__).parent.parent / "data" / "normalized"
 
 _SERVICES_BLOCK: str | None = None
 _EMPLOYEES_BLOCK: str | None = None
+_SALON_BLOCK: str | None = None
 
 
 def _services_block() -> str:
@@ -99,6 +105,46 @@ def _employees_block() -> str:
     return _EMPLOYEES_BLOCK
 
 
+def _salon_block() -> str:
+    global _SALON_BLOCK
+    if _SALON_BLOCK:
+        return _SALON_BLOCK
+    try:
+        with open(_DATA_DIR / "salon.json", encoding="utf-8") as f:
+            data = json.load(f)
+        adr = data.get("adresse", {})
+        contact = data.get("contact", {})
+        h = data.get("horaires", {})
+
+        # Build hours string: list open days + closed days
+        jours = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+        open_parts = []
+        closed_parts = []
+        for jour in jours:
+            slot = h.get(jour)
+            if slot:
+                debut = slot["debut"].replace(":00", "h").replace(":30", "h30")
+                fin = slot["fin"].replace(":00", "h").replace(":30", "h30")
+                open_parts.append(f"{jour} {debut}-{fin}")
+            else:
+                closed_parts.append(jour)
+        hours_str = ", ".join(open_parts)
+        if closed_parts:
+            hours_str += f". Fermé {', '.join(closed_parts)}."
+
+        _SALON_BLOCK = (
+            f"- Adresse : {adr.get('rue', '')}, {adr.get('code_postal', '')} {adr.get('ville', '')}"
+            f" (quartier {adr.get('quartier', '')})\n"
+            f"- Tél : {contact.get('telephone', '')} | Email : {contact.get('email', '')}"
+            f" | Instagram : {contact.get('instagram', '')}\n"
+            f"- Horaires : {hours_str}"
+        )
+    except Exception as exc:
+        logger.warning("salon block load failed: %s", exc)
+        _SALON_BLOCK = "  (informations salon indisponibles)"
+    return _SALON_BLOCK
+
+
 def build_system_prompt(
     today: str | None = None,
     client_phone: str | None = None,
@@ -118,12 +164,14 @@ def build_system_prompt(
         if caller_lines else ""
     )
 
-    return f"""Tu es Marine, la réceptionniste IA de Maison Éclat, un salon de coiffure haut de gamme parisien.
+    agent_name = settings.AGENT_NAME or "Marine"
+    agent_desc = settings.AGENT_DESCRIPTION or "réceptionniste IA"
+    salon_name = settings.SALON_NAME or "le salon"
+
+    return f"""Tu es {agent_name}, {agent_desc} de {salon_name}, un salon de coiffure haut de gamme parisien.
 
 SALON
-- Adresse : 42 rue des Petits-Champs, 75002 Paris (quartier Palais-Royal / Vivienne)
-- Tél : 01 42 60 74 28 | Email : contact@maison-eclat.fr | Instagram : @maison.eclat.paris
-- Horaires : mardi-mercredi 9h-19h, jeudi 10h-20h, vendredi 9h-20h, samedi 9h-18h. Fermé dimanche et lundi.
+{_salon_block()}
 - Aujourd'hui : {today_str}
 
 RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
@@ -448,7 +496,7 @@ async def _exec_check_slots(args: dict, db: AsyncSession) -> str:
     return f"Aucun créneau disponible le {date_str} pour {svc.label}."
 
 
-async def _exec_create_booking(args: dict, db: AsyncSession) -> str:
+async def _exec_create_booking(args: dict, db: AsyncSession, tenant_id: int = 0) -> str:
     service_id = args.get("service_id", "")
     employee_id = args.get("employee_id", "")
     date_str = args.get("date", "")
@@ -484,6 +532,7 @@ async def _exec_create_booking(args: dict, db: AsyncSession) -> str:
     emp = await db.get(Employee, employee_id)
 
     booking = Booking(
+        tenant_id=tenant_id or None,
         client_name=client_name,
         client_phone=client_phone,
         service_id=service_id,
@@ -527,13 +576,13 @@ async def _exec_create_booking(args: dict, db: AsyncSession) -> str:
     )
 
 
-async def _exec_cancel_booking(args: dict, db: AsyncSession) -> str:
+async def _exec_cancel_booking(args: dict, db: AsyncSession, tenant_id: int = 0) -> str:
     booking_id = args.get("booking_id")
     if not booking_id:
         return "Le numéro de rendez-vous est manquant. Demande-le au client."
 
     booking = await db.get(Booking, int(booking_id))
-    if not booking:
+    if not booking or (tenant_id and booking.tenant_id != tenant_id):
         return (
             f"Aucun rendez-vous trouvé avec le numéro {booking_id}. "
             "Vérifie le numéro avec le client."
@@ -554,7 +603,7 @@ async def _exec_cancel_booking(args: dict, db: AsyncSession) -> str:
     return f"Rendez-vous numéro {booking_id} annulé avec succès."
 
 
-async def _exec_reschedule_booking(args: dict, db: AsyncSession) -> str:
+async def _exec_reschedule_booking(args: dict, db: AsyncSession, tenant_id: int = 0) -> str:
     booking_id = args.get("booking_id")
     new_date = args.get("new_date", "")
     new_time = args.get("new_time", "")
@@ -569,7 +618,7 @@ async def _exec_reschedule_booking(args: dict, db: AsyncSession) -> str:
     )
     booking = result.scalars().first()
 
-    if not booking:
+    if not booking or (tenant_id and booking.tenant_id != tenant_id):
         return (
             f"Aucun rendez-vous trouvé avec le numéro {booking_id}. "
             "Vérifie le numéro avec le client."
@@ -599,12 +648,22 @@ async def _exec_reschedule_booking(args: dict, db: AsyncSession) -> str:
     if not ok:
         return f"Créneau non disponible : {message}"
 
+    old_start = booking.start_time
     booking.start_time = new_start
     booking.end_time = end_time
     await db.commit()
 
     emp_name = booking.employee.prenom if booking.employee else ""
     svc_label = booking.service.label if booking.service else ""
+
+    asyncio.create_task(send_owner_reschedule_alert(
+        booking_id=booking.id,
+        client_name=booking.client_name or "",
+        client_phone=booking.client_phone,
+        old_start=old_start,
+        new_start=new_start,
+    ))
+
     return (
         f"Rendez-vous #{booking_id} déplacé : {svc_label} "
         f"le {new_date} à {new_time} avec {emp_name}. C'est confirmé."
@@ -653,17 +712,17 @@ async def _exec_send_sms(args: dict, db: AsyncSession) -> str:
     return "SMS de confirmation envoyé." if sent else "Échec de l'envoi du SMS."
 
 
-async def _execute_tool(name: str, args: dict, db: AsyncSession) -> str:
+async def _execute_tool(name: str, args: dict, db: AsyncSession, tenant_id: int = 0) -> str:
     """Dispatch a tool call and return a plain-text result for the LLM."""
     try:
         if name == "check_slots":
             return await _exec_check_slots(args, db)
         if name == "create_booking":
-            return await _exec_create_booking(args, db)
+            return await _exec_create_booking(args, db, tenant_id=tenant_id)
         if name == "cancel_booking":
-            return await _exec_cancel_booking(args, db)
+            return await _exec_cancel_booking(args, db, tenant_id=tenant_id)
         if name == "reschedule_booking":
-            return await _exec_reschedule_booking(args, db)
+            return await _exec_reschedule_booking(args, db, tenant_id=tenant_id)
         if name == "send_sms_confirmation":
             return await _exec_send_sms(args, db)
         if name == "request_voicemail":
@@ -731,6 +790,7 @@ async def llm_turn(
     today: str | None = None,
     client_phone: str | None = None,
     client_name: str | None = None,
+    tenant_id: int = 0,
 ) -> tuple[str, list[dict], str | None]:
     """
     Process one user turn through GPT-4o with function calling.
@@ -784,7 +844,7 @@ async def llm_turn(
                 fn_args = {}
 
             logger.info("llm_tool: %s(%s)", fn_name, list(fn_args.keys()))
-            result = await _execute_tool(fn_name, fn_args, db)
+            result = await _execute_tool(fn_name, fn_args, db, tenant_id=tenant_id)
             logger.debug("llm_tool result: %s → %s", fn_name, result[:120])
 
             working.append({
