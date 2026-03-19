@@ -156,6 +156,18 @@ class Settings(BaseSettings):
         "Comment puis-je vous aider ?"
     )
     GOODBYE_TEXT: str = "Merci d'avoir appelé Maison Éclat. À bientôt !"
+    CONSENT_ENABLED: bool = True
+    CONSENT_TEXT: str = (
+        "Cet appel est traité par une assistante de réservation IA "
+        "et peut être enregistré à des fins de qualité de service. "
+        "Si vous ne souhaitez pas être enregistré, appuyez sur la touche 1. "
+        "Sinon, restez en ligne."
+    )
+    CONSENT_REFUSAL_TEXT: str = (
+        "Votre appel ne sera pas enregistré. "
+        "Vous pouvez nous joindre directement au salon pour prendre rendez-vous. "
+        "Au revoir et à bientôt !"
+    )
     VOICEMAIL_TEXT: str = (
         "Je vous passe en messagerie vocale. "
         "Veuillez laisser votre message après le signal sonore. "

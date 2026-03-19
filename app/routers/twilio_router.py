@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -135,6 +135,21 @@ def _gather_action(request: Request) -> str:
 
 def _voice_url(request: Request) -> str:
     return f"{_base_url(request)}/api/v1/twilio/voice"
+
+
+def _consent_url(request: Request) -> str:
+    return f"{_base_url(request)}/api/v1/twilio/consent"
+
+
+async def _greeting_audio_url(
+    request: Request,
+    tenant_settings: object,
+    call_sid: str,
+) -> str | None:
+    """Return the greeting audio URL (pre-cached or freshly synthesised)."""
+    if _cached_greeting_filename:
+        return f"{_base_url(request)}/audio/{_cached_greeting_filename}"
+    return await _tts(tenant_settings.GREETING_TEXT, request, call_sid, 0)  # type: ignore[attr-defined]
 
 
 async def _tts(
@@ -310,9 +325,32 @@ async def twilio_voice(
         caller=caller_number,
     )
 
-    # Create session using CallSid as session_id (idempotent: check first)
+    # Idempotent session check (Twilio may replay the webhook)
     state = await db_load_session(db, call_sid, tenant_id=tenant.id)
     is_new_session = state is None
+
+    tenant_settings = get_tenant_settings(tenant.id)
+
+    # New call + RGPD consent enabled → play consent message before creating session
+    if is_new_session and tenant_settings.CONSENT_ENABLED:
+        metrics.inc("telephony_calls_started")
+        audio_url: str | None = await _tts(tenant_settings.CONSENT_TEXT, request, call_sid, 0)
+        twiml = TwiML()
+        gather = twiml.gather(
+            action=_consent_url(request),
+            input="dtmf",
+            timeout="8",
+            num_digits="1",
+        )
+        if audio_url:
+            gather.play(audio_url)
+        else:
+            gather.say(tenant_settings.CONSENT_TEXT, voice=_VOICE, language=_LANG)
+        # Redirect handles timeout (no DTMF = implied consent)
+        twiml.redirect(_consent_url(request))
+        return twiml.response()
+
+    # New call, consent disabled → create session immediately
     if is_new_session:
         state = await db_create_session(
             db,
@@ -324,17 +362,12 @@ async def twilio_voice(
         )
         conversation_manager._sessions[call_sid] = state
         await db.commit()
+        metrics.inc("telephony_calls_started")
+        metrics.inc("sessions_started")
 
-    metrics.inc("telephony_calls_started")
-    metrics.inc("sessions_started")
-
-    tenant_settings = get_tenant_settings(tenant.id)
-    # First call: play greeting. Silence timeout re-entry: use short re-prompt.
+    # First call (no consent) or silence timeout re-entry
     if is_new_session:
-        if _cached_greeting_filename:
-            audio_url: str | None = f"{_base_url(request)}/audio/{_cached_greeting_filename}"
-        else:
-            audio_url = await _tts(tenant_settings.GREETING_TEXT, request, call_sid, 0)
+        audio_url = await _greeting_audio_url(request, tenant_settings, call_sid)
         prompt = tenant_settings.GREETING_TEXT
     else:
         audio_url = await _tts(_SILENCE_PROMPT, request, call_sid, state.turns)
@@ -352,6 +385,92 @@ async def twilio_voice(
         gather.play(audio_url)
     else:
         gather.say(prompt, voice=_VOICE, language=_LANG)
+    twiml.redirect(_voice_url(request))
+
+    return twiml.response()
+
+
+@router.post("/consent")
+async def twilio_consent(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
+) -> Response:
+    """
+    Handles RGPD consent DTMF result.
+
+    Called after <Gather input="dtmf"> from /twilio/voice:
+    - Digits == "1" → caller refuses recording → hangup cleanly (no session created)
+    - Digits empty (timeout = redirect fallthrough) → implied consent → create session + greeting
+    """
+    params = dict(await request.form())
+    await _verify_signature(request, params)
+
+    call_sid = params.get("CallSid", "")
+    caller_number = params.get("From", "")
+    caller_name = params.get("CallerName", "")
+    digits = params.get("Digits", "").strip()
+
+    if not call_sid:
+        raise HTTPException(status_code=400, detail="Missing CallSid.")
+
+    tenant_settings = get_tenant_settings(tenant.id)
+
+    if digits == "1":
+        # Caller refuses recording — hang up politely without creating a session
+        _slog.warning("consent_refused", call_sid=call_sid[:12], caller=caller_number)
+        metrics.inc("consent_refused")
+        refusal_text = tenant_settings.CONSENT_REFUSAL_TEXT
+        audio_url: str | None = await _tts(refusal_text, request, call_sid, 0)
+        twiml = TwiML()
+        if audio_url:
+            twiml.play(audio_url)
+        else:
+            twiml.say(refusal_text, voice=_VOICE, language=_LANG)
+        twiml.hangup()
+        return twiml.response()
+
+    if digits:
+        # Unexpected DTMF key — re-play the consent message
+        _slog.info("consent_unexpected_digit", call_sid=call_sid[:12], digit=digits)
+        return TwiML().redirect(_voice_url(request)).response()
+
+    # No DTMF (timeout) = implied consent — create session and play greeting
+    _slog.info("consent_accepted", call_sid=call_sid[:12], caller=caller_number)
+    metrics.inc("consent_accepted")
+
+    state = await db_load_session(db, call_sid, tenant_id=tenant.id)
+    if state is None:
+        state = await db_create_session(
+            db,
+            tenant.id,
+            client_name=caller_name or None,
+            client_phone=caller_number or None,
+            channel="twilio",
+            session_id=call_sid,
+        )
+        state.consent_given = True
+        state.consent_at = datetime.now(timezone.utc)
+        conversation_manager._sessions[call_sid] = state
+        await db_save_session(db, state)
+        await db.commit()
+        metrics.inc("sessions_started")
+
+    # Play greeting
+    audio_url = await _greeting_audio_url(request, tenant_settings, call_sid)
+
+    twiml = TwiML()
+    gather = twiml.gather(
+        action=_gather_action(request),
+        input="speech",
+        language=_LANG,
+        timeout="5",
+        speech_timeout="auto",
+    )
+    if audio_url:
+        gather.play(audio_url)
+    else:
+        gather.say(tenant_settings.GREETING_TEXT, voice=_VOICE, language=_LANG)
     twiml.redirect(_voice_url(request))
 
     return twiml.response()
@@ -605,9 +724,9 @@ async def twilio_status(
             conversation_manager.end_session(call_sid)
             await db_save_session(db, state)
             await db.commit()
+            metrics.inc("sessions_completed")
 
         metrics.inc("telephony_calls_ended")
-        metrics.inc("sessions_completed")
 
     return {"status": "ok", "call_sid": call_sid, "call_status": call_status}
 

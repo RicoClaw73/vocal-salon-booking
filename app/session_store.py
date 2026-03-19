@@ -80,6 +80,8 @@ def _row_to_state(row: VoiceSession) -> ConversationState:
         created_at=_ensure_aware(row.created_at),
         last_activity=_ensure_aware(row.last_activity),
         messages=messages,
+        consent_given=row.consent_given,
+        consent_at=_ensure_aware(row.consent_at) if row.consent_at is not None else None,
     )
     return state
 
@@ -97,6 +99,8 @@ def _state_to_row_dict(state: ConversationState) -> dict:
         "channel": state.channel,
         "last_activity": state.last_activity,
         "messages_json": json.dumps(state.messages) if state.messages else "[]",
+        "consent_given": state.consent_given,
+        "consent_at": state.consent_at,
     }
 
 

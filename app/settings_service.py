@@ -183,6 +183,36 @@ SETTINGS_METADATA: list[dict[str, Any]] = [
         "type": "int",
         "is_sensitive": False,
     },
+    # ── Consentement RGPD vocal ──────────────────────────────
+    {
+        "key": "CONSENT_ENABLED",
+        "label": "Consentement RGPD vocal activé",
+        "description": "Joue un message de consentement CNIL avant l'accueil vocal. Recommandé pour tout appel enregistré.",
+        "section": "Consentement RGPD vocal",
+        "tab": "gerant",
+        "type": "bool",
+        "is_sensitive": False,
+    },
+    {
+        "key": "CONSENT_TEXT",
+        "label": "Message de consentement",
+        "description": "Texte prononcé en début d'appel. Doit mentionner l'IA, l'enregistrement et la possibilité d'appuyer sur 1 pour refuser.",
+        "section": "Consentement RGPD vocal",
+        "tab": "gerant",
+        "type": "str",
+        "multiline": True,
+        "is_sensitive": False,
+    },
+    {
+        "key": "CONSENT_REFUSAL_TEXT",
+        "label": "Message de refus",
+        "description": "Texte prononcé lorsque le client appuie sur 1 pour refuser l'enregistrement. L'appel est raccroché après.",
+        "section": "Consentement RGPD vocal",
+        "tab": "gerant",
+        "type": "str",
+        "multiline": True,
+        "is_sensitive": False,
+    },
     # ── RGPD & Rétention ─────────────────────────────────────
     {
         "key": "SESSION_RETENTION_DAYS",

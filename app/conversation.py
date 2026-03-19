@@ -36,6 +36,9 @@ class ConversationState:
     last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     # LLM conversation history (OpenAI messages format, no system message)
     messages: list = field(default_factory=list)
+    # RGPD consent: None=pending, True=accepted (implicit), False=refused
+    consent_given: bool | None = None
+    consent_at: datetime | None = None
 
     def touch(self) -> None:
         """Update last_activity timestamp."""
