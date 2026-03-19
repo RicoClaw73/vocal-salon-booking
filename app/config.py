@@ -114,6 +114,33 @@ class Settings(BaseSettings):
     TWILIO_PHONE_NUMBER: str = ""  # Your Twilio number e.g. +33XXXXXXXXX
     TWILIO_TRANSFER_NUMBER: str = "" # Human fallback number (optional)
 
+    # ── RGPD data retention ───────────────────────────────────
+    # Voice sessions (+ transcripts) older than this are purged automatically.
+    SESSION_RETENTION_DAYS: int = 90
+    # Resolved/called-back callback requests older than this are purged.
+    CALLBACK_RETENTION_DAYS: int = 90
+    # Hour of day (local time, 24h) at which the purge runs. Default: 3h (off-peak).
+    PURGE_HOUR: int = 3
+
+    # ── SMS reminders (J-1) ───────────────────────────────────
+    # Set to True to enable automatic day-before appointment reminders.
+    REMINDER_ENABLED: bool = False
+    # Hour of day (local time, 24h) at which reminders are sent. Default: 10h.
+    REMINDER_HOUR: int = 10
+
+    # ── Owner notifications (new bookings) ────────────────────
+    # SMS alert to the salon owner on each new booking (via Twilio).
+    # Leave empty to disable.
+    OWNER_PHONE: str = ""
+
+    # ── Email notifications (callback requests) ───────────────
+    # Resend.com API key (free tier: 100 emails/day). Leave empty to disable.
+    RESEND_API_KEY: str = ""
+    # Email address to receive callback request notifications.
+    SALON_EMAIL: str = ""
+    # From address shown in notification emails.
+    SALON_EMAIL_FROM: str = "notifications@maison-eclat.fr"
+
     # ── Telephony – Phase 5.4: Pilot real-call flow ───────────
     # Twilio webhook URL for signature verification (must match the URL
     # configured in the Twilio console).  Only used when TELEPHONY_PROVIDER=twilio

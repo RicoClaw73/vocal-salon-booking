@@ -122,6 +122,26 @@ class TwiML:
         el.text = number
         return self
 
+    def record(
+        self,
+        action: str,
+        max_length: int = 120,
+        timeout: int = 10,
+        play_beep: bool = True,
+        method: str = "POST",
+    ) -> "TwiML":
+        """Add a <Record> verb. Records caller audio and POSTs to action URL."""
+        SubElement(
+            self._root,
+            "Record",
+            action=action,
+            maxLength=str(max_length),
+            timeout=str(timeout),
+            playBeep="true" if play_beep else "false",
+            method=method,
+        )
+        return self
+
     # ── SMS verbs ──────────────────────────────────────────────
 
     def message(self, text: str, to: str = "", from_: str = "") -> "TwiML":

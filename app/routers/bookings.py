@@ -9,6 +9,8 @@ DELETE /bookings/{id}       – cancel a booking
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +20,7 @@ from app.database import get_db
 from app.models import Booking, BookingStatus
 from app.schemas import BookingCancelOut, BookingCreate, BookingOut, BookingReschedule
 from app.slot_engine import validate_booking_request
+from app.sms_sender import send_owner_cancel_alert
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -141,6 +144,14 @@ async def cancel_booking(
 
     booking.status = BookingStatus.cancelled
     await db.commit()
+
+    asyncio.create_task(send_owner_cancel_alert(
+        booking_id=booking.id,
+        client_name=booking.client_name,
+        client_phone=booking.client_phone,
+        start_time=booking.start_time,
+    ))
+
     return BookingCancelOut(
         id=booking.id,
         status="cancelled",

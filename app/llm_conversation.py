@@ -19,6 +19,7 @@ is not configured or any call fails.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import date, datetime, timedelta
@@ -33,7 +34,8 @@ from app.config import settings
 from app.models import Booking, BookingStatus, Employee, EmployeeCompetency, Service
 from app.salon_info import get_info_response
 from app.slot_engine import find_available_slots, validate_booking_request
-from app.sms_sender import send_booking_confirmation
+from app.email_sender import send_owner_booking_email
+from app.sms_sender import send_booking_confirmation, send_owner_booking_alert, send_owner_cancel_alert
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +146,7 @@ RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Quand un outil retourne un message d'erreur ou d'échec, reformule-le toujours de façon naturelle et empathique — ne répète jamais le message brut.
 - Après avoir exécuté avec succès create_booking : demande au client s'il souhaite recevoir une confirmation par SMS ("Souhaitez-vous recevoir un SMS de confirmation ?"). Si oui, appelle send_sms_confirmation avec le numéro du rendez-vous. Si non, passe directement à la suite. Puis demande "Y a-t-il autre chose que je puisse faire pour vous ?"
 - Après cancel_booking ou reschedule_booking, demande directement "Y a-t-il autre chose que je puisse faire pour vous ?" sans proposer de SMS. Ne raccroche jamais immédiatement après une action.
+- Si tu ne peux pas résoudre un problème après 2 tentatives, ou si le client demande explicitement à parler à quelqu'un ou à laisser un message : appelle request_voicemail. Ne l'appelle pas si le problème est simplement une disponibilité nulle — propose d'autres créneaux à la place.
 - Ne dis JAMAIS qu'un créneau est indisponible à une heure précise sans avoir appelé check_slots avec time_from/time_to correspondants. Si le client demande "vers 16h", appelle check_slots avec time_from:"15:00" et time_to:"17:00" avant de conclure quoi que ce soit.
 - Pour changer de coiffeur sur un rendez-vous déjà confirmé : utilise cancel_booking sur le rendez-vous existant, puis create_booking avec le nouvel employé au même créneau. N'utilise JAMAIS reschedule_booking pour changer d'employé — cet outil ne modifie que la date et l'heure.
 - Si le client dit quelque chose d'incompréhensible ou hors contexte, demande-lui poliment de préciser ("Je n'ai pas bien saisi, pourriez-vous reformuler ?") plutôt que de répondre que tu n'as pas compris.
@@ -159,7 +162,8 @@ OUTILS
 - create_booking : crée un rendez-vous confirmé (après vérif et collecte des infos client)
 - cancel_booking : annule un rendez-vous existant
 - reschedule_booking : déplace un rendez-vous à une nouvelle date/heure
-- get_salon_info : répond aux questions générales sur le salon{caller_block}"""
+- get_salon_info : répond aux questions générales sur le salon
+- request_voicemail : bascule en messagerie vocale (le client laisse un message, le salon rappelle){caller_block}"""
 
 
 # ── Tool definitions ─────────────────────────────────────────
@@ -307,6 +311,23 @@ TOOLS: list[dict] = [
                     },
                 },
                 "required": ["topic"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "request_voicemail",
+            "description": (
+                "Bascule la conversation en messagerie vocale : le client peut laisser un message "
+                "enregistré qui sera transcrit et envoyé au salon. Appeler quand le bot ne peut pas "
+                "résoudre le problème après 2 tentatives, ou si le client demande explicitement "
+                "à parler à quelqu'un ou à laisser un message."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
             },
         },
     },
@@ -478,6 +499,26 @@ async def _exec_create_booking(args: dict, db: AsyncSession) -> str:
     svc_label = svc.label if svc else service_id
     emp_name = f"{emp.prenom} {emp.nom}" if emp else employee_id
 
+    # Notify salon owner (fire-and-forget, never blocks the booking confirmation)
+    asyncio.create_task(send_owner_booking_alert(
+        booking_id=booking.id,
+        svc_label=svc_label,
+        emp_name=emp_name,
+        date_str=date_str,
+        time_str=time_str,
+        client_name=client_name,
+        client_phone=client_phone,
+    ))
+    asyncio.create_task(send_owner_booking_email(
+        booking_id=booking.id,
+        svc_label=svc_label,
+        emp_name=emp_name,
+        date_str=date_str,
+        time_str=time_str,
+        client_name=client_name,
+        client_phone=client_phone,
+    ))
+
     phone_info = f" — tél : {client_phone}" if client_phone else ""
     return (
         f"Rendez-vous #{booking.id} confirmé : {svc_label} "
@@ -502,6 +543,14 @@ async def _exec_cancel_booking(args: dict, db: AsyncSession) -> str:
 
     booking.status = BookingStatus.cancelled
     await db.commit()
+
+    asyncio.create_task(send_owner_cancel_alert(
+        booking_id=booking.id,
+        client_name=booking.client_name,
+        client_phone=booking.client_phone,
+        start_time=booking.start_time,
+    ))
+
     return f"Rendez-vous numéro {booking_id} annulé avec succès."
 
 
@@ -562,6 +611,15 @@ async def _exec_reschedule_booking(args: dict, db: AsyncSession) -> str:
     )
 
 
+async def _exec_request_voicemail(args: dict) -> str:
+    """Signal to twilio_router that the caller wants to leave a voicemail."""
+    return (
+        "Messagerie vocale activée. "
+        "Dis au client : 'Je vous passe en messagerie, veuillez laisser votre message "
+        "après le signal sonore. Le salon vous rappellera dès que possible.'"
+    )
+
+
 async def _exec_send_sms(args: dict, db: AsyncSession) -> str:
     booking_id = args.get("booking_id")
     if not booking_id:
@@ -608,6 +666,8 @@ async def _execute_tool(name: str, args: dict, db: AsyncSession) -> str:
             return await _exec_reschedule_booking(args, db)
         if name == "send_sms_confirmation":
             return await _exec_send_sms(args, db)
+        if name == "request_voicemail":
+            return await _exec_request_voicemail(args)
         if name == "get_salon_info":
             return get_info_response(args.get("topic"))
         return f"Outil inconnu : {name}"

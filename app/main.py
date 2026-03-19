@@ -20,6 +20,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.audio_store import cleanup_loop, cleanup_old_files
+from app.purge import purge_loop
+from app.reminder import reminder_loop
 from app.config import settings
 from app.database import async_session, engine
 from app.models import Base
@@ -66,9 +68,17 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         cleanup_loop(audio_dir, settings.AUDIO_MAX_AGE_HOURS)
     )
 
+    # J-1 reminder loop (fires daily at REMINDER_HOUR when REMINDER_ENABLED=True)
+    reminder_task = asyncio.create_task(reminder_loop())
+
+    # RGPD purge loop (fires daily at PURGE_HOUR, always active)
+    purge_task = asyncio.create_task(purge_loop())
+
     yield  # ── app runs ──
 
     cleanup_task.cancel()
+    reminder_task.cancel()
+    purge_task.cancel()
     await engine.dispose()
 
 

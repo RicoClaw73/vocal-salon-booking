@@ -53,6 +53,12 @@ class BookingStatus(str, enum.Enum):
     no_show = "no_show"
 
 
+class CallbackRequestStatus(str, enum.Enum):
+    pending = "pending"
+    called_back = "called_back"
+    resolved = "resolved"
+
+
 class EmployeeLevel(str, enum.Enum):
     expert = "expert"
     senior = "senior"
@@ -142,6 +148,7 @@ class Booking(Base):
         Enum(BookingStatus), default=BookingStatus.confirmed
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -184,6 +191,32 @@ class VoiceSession(Base):
         back_populates="session",
         order_by="TranscriptEvent.turn_number",
         cascade="all, delete-orphan",
+    )
+
+
+# ── Callback Request (voicemail) ───────────────────────────
+
+class CallbackRequest(Base):
+    """
+    Voice message left by a caller when the bot cannot resolve their request.
+
+    The caller records a message; it is transcribed (Whisper) and shown in
+    the admin dashboard so the salon can call them back.
+    """
+    __tablename__ = "callback_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    caller_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    recording_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    recording_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)  # seconds
+    transcription: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[CallbackRequestStatus] = mapped_column(
+        Enum(CallbackRequestStatus), default=CallbackRequestStatus.pending
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
     )
 
 

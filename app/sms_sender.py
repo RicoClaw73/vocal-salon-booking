@@ -64,6 +64,180 @@ def _build_sms(
     return body[:160]
 
 
+def _build_reminder_sms(
+    svc_label: str,
+    emp_name: str,
+    date_str: str,
+    time_str: str,
+) -> str:
+    """Build J-1 reminder SMS body. Must stay under 160 GSM-7 chars."""
+    date_fr = _format_date_fr(date_str, time_str)
+    emp_first = emp_name.split()[0] if emp_name else emp_name
+    svc_short = svc_label[:28] + "…" if len(svc_label) > 28 else svc_label
+    # "Demain" replaces the full date to save chars and sound natural
+    day_label = date_fr.split(" à ")[0]  # e.g. "Vendredi 20 mars"
+    time_label = date_fr.split(" à ")[1] if " à " in date_fr else time_str
+    body = (
+        f"Maison Eclat - Rappel RDV\n"
+        f"{svc_short} avec {emp_first}\n"
+        f"Demain {day_label} à {time_label}\n"
+        f"42 r. des Petits-Champs, Paris 2e\n"
+        f"Modif/annul: rappeler le salon."
+    )
+    return body[:160]
+
+
+async def send_owner_cancel_alert(
+    booking_id: int,
+    client_name: str,
+    client_phone: str | None,
+    start_time: "datetime",  # noqa: F821
+) -> bool:
+    """
+    Send a brief SMS alert to the salon owner when a booking is cancelled.
+    Returns True on success, False on failure. Never raises.
+    """
+    sid = settings.TWILIO_ACCOUNT_SID
+    token = settings.TWILIO_AUTH_TOKEN
+    from_number = settings.TWILIO_PHONE_NUMBER
+    owner = settings.OWNER_PHONE
+
+    if not (sid and token and from_number and owner):
+        logger.debug("Cancel alert SMS skipped: credentials or OWNER_PHONE not configured")
+        return False
+
+    try:
+        date_display = start_time.strftime("%d/%m à %Hh%M")
+    except Exception:
+        date_display = str(start_time)
+
+    phone_line = f"\nTel: {client_phone}" if client_phone else ""
+    body = (
+        f"[Annulation RDV #{booking_id}]\n"
+        f"Client: {client_name}{phone_line}\n"
+        f"Prévu: {date_display}"
+    )[:160]
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(
+                url,
+                data={"From": from_number, "To": owner, "Body": body},
+                auth=(sid, token),
+            )
+        if resp.status_code in (200, 201):
+            logger.info("Cancel alert SMS sent for booking #%d", booking_id)
+            return True
+        logger.warning("Cancel alert SMS HTTP %d: %s", resp.status_code, resp.text[:200])
+        return False
+    except httpx.TimeoutException:
+        logger.warning("Cancel alert SMS timeout for booking #%d", booking_id)
+        return False
+    except Exception as exc:
+        logger.warning("Cancel alert SMS error: %s", exc)
+        return False
+
+
+async def send_owner_booking_alert(
+    booking_id: int,
+    svc_label: str,
+    emp_name: str,
+    date_str: str,
+    time_str: str,
+    client_name: str,
+    client_phone: str | None,
+) -> bool:
+    """
+    Send a brief SMS alert to the salon owner on each new booking.
+    Returns True on success, False on failure. Never raises.
+    """
+    sid = settings.TWILIO_ACCOUNT_SID
+    token = settings.TWILIO_AUTH_TOKEN
+    from_number = settings.TWILIO_PHONE_NUMBER
+    owner = settings.OWNER_PHONE
+
+    if not (sid and token and from_number and owner):
+        logger.debug("Owner alert SMS skipped: credentials or OWNER_PHONE not configured")
+        return False
+
+    date_fr = _format_date_fr(date_str, time_str)
+    emp_first = emp_name.split()[0] if emp_name else emp_name
+    svc_short = svc_label[:28] + "…" if len(svc_label) > 28 else svc_label
+    phone_line = f"\nTel: {client_phone}" if client_phone else ""
+    body = (
+        f"[RDV #{booking_id}] {svc_short} / {emp_first}\n"
+        f"{date_fr}\n"
+        f"Client: {client_name}{phone_line}"
+    )[:160]
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(
+                url,
+                data={"From": from_number, "To": owner, "Body": body},
+                auth=(sid, token),
+            )
+        if resp.status_code in (200, 201):
+            logger.info("Owner alert SMS sent for booking #%d", booking_id)
+            return True
+        logger.warning("Owner alert SMS HTTP %d: %s", resp.status_code, resp.text[:200])
+        return False
+    except httpx.TimeoutException:
+        logger.warning("Owner alert SMS timeout for booking #%d", booking_id)
+        return False
+    except Exception as exc:
+        logger.warning("Owner alert SMS error: %s", exc)
+        return False
+
+
+async def send_booking_reminder(
+    client_phone: str,
+    svc_label: str,
+    emp_name: str,
+    date_str: str,
+    time_str: str,
+) -> bool:
+    """
+    Send a J-1 reminder SMS via Twilio. Returns True on success, False on failure.
+    Never raises.
+    """
+    sid = settings.TWILIO_ACCOUNT_SID
+    token = settings.TWILIO_AUTH_TOKEN
+    from_number = settings.TWILIO_PHONE_NUMBER
+
+    if not (sid and token and from_number):
+        logger.debug("Reminder SMS skipped: Twilio credentials not configured")
+        return False
+
+    if not client_phone or client_phone.lower() in ("anonymous", "unknown", ""):
+        logger.debug("Reminder SMS skipped: no valid client phone number")
+        return False
+
+    body = _build_reminder_sms(svc_label, emp_name, date_str, time_str)
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(
+                url,
+                data={"From": from_number, "To": client_phone, "Body": body},
+                auth=(sid, token),
+            )
+        if resp.status_code in (200, 201):
+            logger.info("Reminder SMS sent to …%s", client_phone[-4:])
+            return True
+        logger.warning("Reminder SMS HTTP %d: %s", resp.status_code, resp.text[:200])
+        return False
+    except httpx.TimeoutException:
+        logger.warning("Reminder SMS timeout for %s", client_phone[-4:])
+        return False
+    except Exception as exc:
+        logger.warning("Reminder SMS error: %s", exc)
+        return False
+
+
 async def send_booking_confirmation(
     client_phone: str,
     booking_id: int,

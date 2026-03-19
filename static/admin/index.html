@@ -154,6 +154,45 @@
       transition: background .1s;
     }
     .list-row:hover { background: #f8fafc; }
+
+    /* ── History toggle ──────────────────────── */
+    .hist-pill {
+      display: inline-flex; align-items: center;
+      background: #f1f5f9; border-radius: 20px; padding: 3px;
+    }
+    .hist-pill button {
+      padding: 4px 14px; border-radius: 17px; font-size: 12px; font-weight: 500;
+      color: #64748b; transition: all .15s ease; cursor: pointer; border: none; background: none;
+    }
+    .hist-pill button.active { background: #fff; color: #0f172a; box-shadow: 0 1px 4px rgba(0,0,0,.10); }
+
+    /* ── Stats view ──────────────────────────── */
+    .kpi-card {
+      background: #fff; border: 1px solid #f1f5f9;
+      border-radius: 16px; padding: 18px 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    }
+    .kpi-value { font-size: 28px; font-weight: 700; color: #0f172a; line-height: 1.1; }
+    .kpi-label { font-size: 12px; font-weight: 500; color: #94a3b8; margin-top: 4px; }
+    .bar-track  { background: #f1f5f9; border-radius: 6px; height: 8px; overflow: hidden; }
+    .bar-fill   { height: 100%; border-radius: 6px; transition: width .5s ease; }
+
+    /* ── Callbacks view ──────────────────────── */
+    .cb-card {
+      background: #fff; border: 1px solid #f1f5f9;
+      border-radius: 14px; padding: 16px 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.05);
+      transition: box-shadow .15s;
+    }
+    .cb-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.10); }
+    .cb-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 9px; border-radius: 20px;
+      font-size: 11.5px; font-weight: 600;
+    }
+    .cb-badge.pending    { background:#fff7ed; color:#c2410c; }
+    .cb-badge.called_back{ background:#f0fdf4; color:#166534; }
+    .cb-badge.resolved   { background:#f1f5f9; color:#475569; }
   </style>
 </head>
 
@@ -241,6 +280,12 @@
     <!-- Spacer -->
     <div class="flex-1"></div>
 
+    <!-- History toggle -->
+    <div class="hist-pill hidden md:inline-flex" id="histToggle">
+      <button id="histBtnUpcoming" class="active" onclick="setHistoryMode(false)">À venir</button>
+      <button id="histBtnPast"                    onclick="setHistoryMode(true)">Historique</button>
+    </div>
+
     <!-- RDV count -->
     <div class="hidden md:flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
       <i data-lucide="calendar" class="w-3.5 h-3.5 text-slate-400"></i>
@@ -270,6 +315,21 @@
         <i data-lucide="list" class="w-3.5 h-3.5"></i>
         <span class="hidden sm:block">Liste</span>
       </button>
+      <button onclick="setView('callbacks')" id="btnCallbacks"
+              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
+                     transition flex items-center gap-1.5 text-xs font-medium relative">
+        <i data-lucide="voicemail" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:block">Rappels</span>
+        <span id="cbBadge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-orange-500
+                                   text-white text-[9px] font-bold rounded-full
+                                   flex items-center justify-center"></span>
+      </button>
+      <button onclick="setView('stats')" id="btnStats"
+              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
+                     transition flex items-center gap-1.5 text-xs font-medium">
+        <i data-lucide="bar-chart-2" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:block">Stats</span>
+      </button>
     </div>
   </header>
 
@@ -294,6 +354,79 @@
   <!-- ── List view ──────────────────────────── -->
   <div id="listView" class="hidden flex-1 overflow-y-auto scroll">
     <div id="listBody" class="max-w-3xl mx-auto px-4 py-4 pb-24"></div>
+  </div>
+
+  <!-- ── Stats view ────────────────────────── -->
+  <div id="statsView" class="hidden flex-1 overflow-y-auto scroll">
+    <div class="max-w-2xl mx-auto px-4 py-6 pb-24">
+
+      <div class="flex items-center gap-3 mb-5">
+        <span class="text-sm font-semibold text-slate-700" id="statsPeriodLabel">—</span>
+        <div class="flex-1"></div>
+        <button onclick="loadStats()" title="Rafraîchir"
+                class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100
+                       text-slate-400 transition">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+
+      <!-- KPI cards -->
+      <div class="grid grid-cols-2 gap-3 mb-6">
+        <div class="kpi-card">
+          <div class="kpi-value" id="statsRdv">—</div>
+          <div class="kpi-label">RDV ce mois</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-value text-emerald-600" id="statsRevenue">—</div>
+          <div class="kpi-label">CA estimé ce mois</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-value text-brand-600" id="statsUpcoming">—</div>
+          <div class="kpi-label">RDV à venir</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-value text-orange-500" id="statsPending">—</div>
+          <div class="kpi-label">Rappels en attente</div>
+        </div>
+      </div>
+
+      <!-- Top services -->
+      <div class="bg-white border border-slate-100 rounded-2xl p-5 mb-4 shadow-sm">
+        <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Top services (mois)</div>
+        <div id="statsTopServices" class="space-y-3"></div>
+      </div>
+
+      <!-- Par coiffeur -->
+      <div class="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
+        <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Par coiffeur·se (mois)</div>
+        <div id="statsByEmployee" class="space-y-3"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Callbacks view ─────────────────────── -->
+  <div id="callbacksView" class="hidden flex-1 overflow-y-auto scroll">
+    <div class="max-w-2xl mx-auto px-4 py-6 pb-24">
+
+      <!-- Filter tabs -->
+      <div class="flex items-center gap-2 mb-5">
+        <span class="text-sm font-semibold text-slate-700 mr-1">Demandes de rappel</span>
+        <div class="flex-1"></div>
+        <button onclick="setCbFilter('pending')" id="cbFilterPending"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg transition">En attente</button>
+        <button onclick="setCbFilter('all')" id="cbFilterAll"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg transition">Toutes</button>
+        <button onclick="loadCallbacks()" title="Rafraîchir"
+                class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100
+                       text-slate-400 transition">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+
+      <div id="callbacksList"></div>
+
+    </div>
   </div>
 
 </div>
@@ -415,6 +548,7 @@ let token        = localStorage.getItem('admin_token') || '';
 let bookings     = [];
 let weekOffset   = 0;
 let view         = 'calendar';
+let historyMode  = false;   // false = upcoming, true = past
 let activeEmps   = new Set();
 let empIndex     = {};
 let selectedId   = null;
@@ -431,6 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
   else setView('calendar', true);
 
   loadBookings();
+  loadCallbacks();
 
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT') return;
@@ -463,6 +598,7 @@ function showApp() {
 async function loadBookings() {
   try {
     const p = new URLSearchParams({ days: 365 });
+    if (historyMode) p.set('past', 'true');
     if (token) p.append('token', token);
     const r = await fetch(`/api/v1/admin/bookings?${p}`);
     if (r.status === 401) { showLogin(); return; }
@@ -475,6 +611,16 @@ async function loadBookings() {
     console.error(err);
     showToast('Erreur de chargement', 'error');
   }
+}
+
+function setHistoryMode(past) {
+  historyMode = past;
+  document.getElementById('histBtnUpcoming').classList.toggle('active', !past);
+  document.getElementById('histBtnPast').classList.toggle('active', past);
+  // In history mode, calendar doesn't make sense — switch to list
+  if (past && view === 'calendar') setView('list', true);
+  activeEmps.clear();
+  loadBookings();
 }
 
 // ── Week helpers ───────────────────────────────────────────────────
@@ -718,18 +864,23 @@ function renderList() {
       const durMin  = Math.round((end - start) / 60000);
       const timeStr = `${String(start.getHours()).padStart(2,'0')}h${String(start.getMinutes()).padStart(2,'0')}`;
 
+      const isCancelled = b.status === 'cancelled';
+      const statusBadge = isCancelled
+        ? '<span class="text-[10px] font-semibold px-2 py-0.5 bg-red-50 text-red-400 rounded-full flex-shrink-0">Annulé</span>'
+        : '';
       const row = document.createElement('div');
-      row.className = `list-row${i > 0 ? ' border-t border-slate-50' : ''}`;
+      row.className = `list-row${i > 0 ? ' border-t border-slate-50' : ''}${isCancelled ? ' opacity-60' : ''}`;
       row.innerHTML = `
         <div class="text-sm font-bold text-slate-700 w-12 flex-shrink-0">${timeStr}</div>
-        <div class="w-[3px] h-10 rounded-full flex-shrink-0" style="background:${c.bg}"></div>
+        <div class="w-[3px] h-10 rounded-full flex-shrink-0" style="background:${isCancelled ? '#cbd5e1' : c.bg}"></div>
         <div class="flex-1 min-w-0">
           <div class="text-sm font-semibold text-slate-900 truncate">${b.client_name || '—'}</div>
           <div class="text-xs text-slate-400 truncate mt-0.5">${b.service_label || ''}</div>
         </div>
+        ${statusBadge}
         <div class="flex items-center gap-2 flex-shrink-0">
           <div class="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
-               style="background:${c.bg}">${initials(b.employee_name)}</div>
+               style="background:${isCancelled ? '#cbd5e1' : c.bg}">${initials(b.employee_name)}</div>
           <span class="text-xs text-slate-500 hidden sm:block">${(b.employee_name||'').split(' ')[0]}</span>
         </div>
         <div class="text-xs text-slate-300 w-12 text-right flex-shrink-0">${durMin}min</div>
@@ -806,23 +957,55 @@ function goToToday()       { weekOffset = 0;       render(); }
 
 function setView(v, silent = false) {
   view = v;
-  const calView  = document.getElementById('calView');
-  const listView = document.getElementById('listView');
-  const btnCal   = document.getElementById('btnCal');
-  const btnList  = document.getElementById('btnList');
+  const calView       = document.getElementById('calView');
+  const listView      = document.getElementById('listView');
+  const callbacksView = document.getElementById('callbacksView');
+  const statsView     = document.getElementById('statsView');
+  const btnCal        = document.getElementById('btnCal');
+  const btnList       = document.getElementById('btnList');
+  const btnCallbacks  = document.getElementById('btnCallbacks');
+  const btnStats      = document.getElementById('btnStats');
+  const empBar        = document.getElementById('empBar');
+  const histToggle    = document.getElementById('histToggle');
   const on  = 'bg-white shadow-sm text-slate-700';
   const off = 'text-slate-500 hover:text-slate-700';
 
+  calView.classList.add('hidden');
+  listView.classList.add('hidden');
+  callbacksView.classList.add('hidden');
+  statsView.classList.add('hidden');
+  btnCal.className       = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
+  btnList.className      = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
+  btnCallbacks.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium relative ${off}`;
+  btnStats.className     = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
+
   if (v === 'calendar') {
-    calView.classList.remove('hidden'); listView.classList.add('hidden');
-    btnCal.className  = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
-    btnList.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
-  } else {
-    listView.classList.remove('hidden'); calView.classList.add('hidden');
+    calView.classList.remove('hidden');
+    btnCal.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    empBar.classList.remove('hidden');
+    histToggle.classList.remove('hidden');
+    histToggle.classList.add('md:inline-flex');
+  } else if (v === 'list') {
+    listView.classList.remove('hidden');
     btnList.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
-    btnCal.className  = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
+    empBar.classList.remove('hidden');
+    histToggle.classList.remove('hidden');
+    histToggle.classList.add('md:inline-flex');
+  } else if (v === 'stats') {
+    statsView.classList.remove('hidden');
+    btnStats.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    empBar.classList.add('hidden');
+    histToggle.classList.add('hidden');
+    loadStats();
+  } else {
+    // callbacks
+    callbacksView.classList.remove('hidden');
+    btnCallbacks.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium relative ${on}`;
+    empBar.classList.add('hidden');
+    histToggle.classList.add('hidden');
+    renderCallbacks();
   }
-  if (!silent) render();
+  if (!silent && v !== 'callbacks' && v !== 'stats') render();
 }
 
 // ── Refresh countdown ──────────────────────────────────────────────
@@ -844,6 +1027,235 @@ function showToast(msg, type = 'success') {
   el.style.background = type === 'error' ? '#dc2626' : '#0f172a';
   el.classList.add('up');
   setTimeout(() => el.classList.remove('up'), 3200);
+}
+
+// ── Callbacks ──────────────────────────────────────────────────────
+let callbacks    = [];
+let cbFilter     = 'pending';
+
+async function loadCallbacks() {
+  try {
+    const p = new URLSearchParams();
+    if (token) p.append('token', token);
+    const r = await fetch(`/api/v1/admin/callbacks?${p}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    callbacks = await r.json();
+    updateCbBadge();
+    if (view === 'callbacks') renderCallbacks();
+  } catch (err) {
+    console.error('Callbacks load error:', err);
+  }
+}
+
+function updateCbBadge() {
+  const pending = callbacks.filter(c => c.status === 'pending').length;
+  const badge = document.getElementById('cbBadge');
+  if (pending > 0) {
+    badge.textContent = pending > 9 ? '9+' : pending;
+    badge.classList.remove('hidden');
+    badge.classList.add('flex');
+  } else {
+    badge.classList.add('hidden');
+    badge.classList.remove('flex');
+  }
+}
+
+function setCbFilter(f) {
+  cbFilter = f;
+  renderCallbacks();
+}
+
+function renderCallbacks() {
+  const list = document.getElementById('callbacksList');
+  list.innerHTML = '';
+
+  // Update filter button styles
+  const fPending = document.getElementById('cbFilterPending');
+  const fAll     = document.getElementById('cbFilterAll');
+  const activeClass = 'bg-slate-900 text-white';
+  const inactiveClass = 'bg-slate-100 text-slate-500 hover:bg-slate-200';
+  fPending.className = `px-3 py-1.5 text-xs font-medium rounded-lg transition ${cbFilter === 'pending' ? activeClass : inactiveClass}`;
+  fAll.className     = `px-3 py-1.5 text-xs font-medium rounded-lg transition ${cbFilter === 'all'     ? activeClass : inactiveClass}`;
+
+  const visible = cbFilter === 'pending'
+    ? callbacks.filter(c => c.status === 'pending')
+    : callbacks;
+
+  if (visible.length === 0) {
+    list.innerHTML = `<div class="text-center py-20">
+      <div class="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+        <svg class="w-7 h-7 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+        </svg>
+      </div>
+      <p class="text-sm font-medium text-slate-400">
+        ${cbFilter === 'pending' ? 'Aucune demande en attente' : 'Aucune demande de rappel'}
+      </p>
+    </div>`;
+    lucide.createIcons();
+    return;
+  }
+
+  visible.forEach(cb => {
+    const card = document.createElement('div');
+    card.className = 'cb-card mb-3';
+
+    const createdAt = new Date(cb.created_at);
+    const dateStr   = createdAt.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric', month:'short'});
+    const timeStr   = createdAt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+    const durStr    = cb.recording_duration ? `${cb.recording_duration}s` : '';
+
+    const badgeLabel = { pending: 'En attente', called_back: 'Rappelé', resolved: 'Résolu' }[cb.status] || cb.status;
+
+    const audioBlock = cb.recording_url
+      ? `<audio controls class="w-full mt-3 h-9 rounded-lg" src="${cb.recording_url}"></audio>`
+      : '';
+
+    const transcriptBlock = cb.transcription
+      ? `<div class="mt-3 bg-slate-50 rounded-xl p-3 text-sm text-slate-600 leading-relaxed border border-slate-100">
+           <div class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Transcription</div>
+           ${cb.transcription}
+         </div>`
+      : (cb.recording_url
+          ? '<div class="mt-2 text-xs text-slate-400 italic">Transcription en cours…</div>'
+          : '');
+
+    const actionBtn = cb.status === 'pending'
+      ? `<button onclick="markCallback(${cb.id},'called_back')"
+                 class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white
+                        text-xs font-semibold rounded-lg transition flex items-center gap-1.5">
+           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+               d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+           </svg>
+           Marquer rappelé
+         </button>`
+      : (cb.status === 'called_back'
+          ? `<button onclick="markCallback(${cb.id},'resolved')"
+                     class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600
+                            text-xs font-semibold rounded-lg transition">
+               Résoudre
+             </button>`
+          : '');
+
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-9 h-9 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <svg class="w-4.5 h-4.5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:18px;height:18px">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm font-bold text-slate-900">${cb.caller_phone || 'N° inconnu'}</div>
+            <div class="text-xs text-slate-400 mt-0.5">${dateStr} à ${timeStr}${durStr ? ` · ${durStr}` : ''}</div>
+          </div>
+        </div>
+        <span class="cb-badge ${cb.status} flex-shrink-0">${badgeLabel}</span>
+      </div>
+      ${audioBlock}
+      ${transcriptBlock}
+      ${actionBtn ? `<div class="mt-3 flex gap-2">${actionBtn}</div>` : ''}
+    `;
+    list.appendChild(card);
+  });
+  lucide.createIcons();
+}
+
+// ── Stats ───────────────────────────────────────────────────────────
+let statsData = null;
+
+async function loadStats() {
+  try {
+    const p = new URLSearchParams();
+    if (token) p.append('token', token);
+    const r = await fetch(`/api/v1/admin/stats?${p}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    statsData = await r.json();
+    renderStats();
+  } catch (err) {
+    console.error('Stats load error:', err);
+    showToast('Erreur chargement stats', 'error');
+  }
+}
+
+function renderStats() {
+  if (!statsData) return;
+  const s = statsData;
+
+  document.getElementById('statsPeriodLabel').textContent = s.period_label || '—';
+  document.getElementById('statsRdv').textContent     = s.rdv_count ?? '—';
+  document.getElementById('statsRevenue').textContent = s.revenue_eur != null ? `${s.revenue_eur.toLocaleString('fr-FR')} €` : '—';
+  document.getElementById('statsUpcoming').textContent = s.upcoming_count ?? '—';
+  document.getElementById('statsPending').textContent  = s.pending_callbacks ?? '—';
+
+  // Top services
+  const svcEl = document.getElementById('statsTopServices');
+  svcEl.innerHTML = '';
+  const maxSvc = s.top_services?.[0]?.count || 1;
+  if (!s.top_services?.length) {
+    svcEl.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">Aucun RDV ce mois</p>';
+  } else {
+    s.top_services.forEach(svc => {
+      const pct = Math.round((svc.count / maxSvc) * 100);
+      svcEl.innerHTML += `
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-sm font-medium text-slate-800 truncate max-w-[65%]">${svc.label}</span>
+            <span class="text-xs text-slate-400 flex-shrink-0">${svc.count} RDV · ${svc.revenue.toLocaleString('fr-FR')} €</span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill bg-brand-500" style="width:${pct}%"></div>
+          </div>
+        </div>`;
+    });
+  }
+
+  // By employee
+  const empEl = document.getElementById('statsByEmployee');
+  empEl.innerHTML = '';
+  const maxEmp = s.by_employee?.[0]?.count || 1;
+  if (!s.by_employee?.length) {
+    empEl.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">Aucun RDV ce mois</p>';
+  } else {
+    s.by_employee.forEach(emp => {
+      const c   = empColor(emp.name);
+      const pct = Math.round((emp.count / maxEmp) * 100);
+      empEl.innerHTML += `
+        <div>
+          <div class="flex items-center gap-2.5 mb-1.5">
+            <div class="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                 style="background:${c.bg}">${initials(emp.name)}</div>
+            <span class="text-sm font-medium text-slate-800 flex-1 truncate">${emp.name}</span>
+            <span class="text-xs text-slate-400 flex-shrink-0">${emp.count} RDV · ${emp.revenue.toLocaleString('fr-FR')} €</span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${pct}%;background:${c.bg}"></div>
+          </div>
+        </div>`;
+    });
+  }
+  lucide.createIcons();
+}
+
+async function markCallback(id, newStatus) {
+  try {
+    const p = new URLSearchParams();
+    if (token) p.append('token', token);
+    const r = await fetch(`/api/v1/admin/callbacks/${id}?${p}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const labels = { called_back: 'Rappel effectué', resolved: 'Résolu' };
+    showToast(labels[newStatus] || 'Mis à jour');
+    await loadCallbacks();
+  } catch {
+    showToast('Erreur lors de la mise à jour', 'error');
+  }
 }
 </script>
 </body>

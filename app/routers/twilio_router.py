@@ -20,18 +20,23 @@ Key design decisions:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import httpx
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audio_store import synthesize_to_file
 from app.config import settings
 from app.conversation import conversation_manager
+from app.database import async_session as db_factory
 from app.database import get_db
 from app.intent import extract_intent_async
+from app.models import CallbackRequest, CallbackRequestStatus
 from app.observability import StructuredLogger, metrics
 from app.session_store import (
     append_transcript_event,
@@ -55,11 +60,24 @@ _cached_greeting_filename: str | None = None
 
 _GREETING = (
     "Bonjour et bienvenue chez Maison Éclat, votre salon de coiffure ! "
+    "Cet appel peut être enregistré à des fins d'amélioration de notre service. "
     "Je peux vous aider à prendre rendez-vous, modifier ou annuler une réservation. "
     "Comment puis-je vous aider ?"
 )
 
 _GOODBYE = "Merci d'avoir appelé Maison Éclat. À bientôt !"
+
+_VOICEMAIL_INVITE = (
+    "Je vous passe en messagerie vocale. "
+    "Veuillez laisser votre message après le signal sonore. "
+    "Le salon vous rappellera dès que possible."
+)
+
+_VOICEMAIL_GOODBYE = (
+    "Votre message a bien été enregistré. "
+    "Le salon vous rappellera dans les meilleurs délais. "
+    "À bientôt !"
+)
 
 _SILENCE_PROMPT = "Je n'ai pas entendu votre réponse. Pouvez-vous répéter ?"
 
@@ -198,6 +216,79 @@ def _is_call_end(params: dict) -> bool:
     """Return True if this is a terminal call status (completed/failed/etc.)."""
     status = params.get("CallStatus", "").lower()
     return status in ("completed", "canceled", "busy", "no-answer", "failed")
+
+
+async def _transcribe_recording(recording_url: str) -> str | None:
+    """
+    Download a Twilio recording and transcribe it with OpenAI Whisper.
+
+    Returns transcription text, or None on any failure.
+    Requires OPENAI_API_KEY and Twilio credentials.
+    """
+    if not settings.OPENAI_API_KEY:
+        return None
+
+    try:
+        # Download audio (Twilio recordings may require auth)
+        auth = (settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            dl = await client.get(recording_url, auth=auth if auth[0] else None)
+        if dl.status_code != 200:
+            logger.warning("Recording download HTTP %d for %s", dl.status_code, recording_url)
+            return None
+
+        audio_bytes = dl.content
+        if not audio_bytes:
+            return None
+
+        # Transcribe with Whisper
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                files={"file": ("recording.mp3", audio_bytes, "audio/mpeg")},
+                data={"model": "whisper-1", "language": "fr"},
+            )
+        if resp.status_code != 200:
+            logger.warning("Whisper transcription HTTP %d", resp.status_code)
+            return None
+        return resp.json().get("text")
+    except Exception as exc:
+        logger.warning("_transcribe_recording error: %s", exc)
+        return None
+
+
+async def _process_recording_background(
+    callback_id: int,
+    recording_url: str | None,
+    caller_phone: str | None,
+) -> None:
+    """
+    Background task: transcribe recording with Whisper, update DB, send email.
+
+    Runs after the HTTP response is already sent to Twilio so the caller
+    is not kept waiting.
+    """
+    transcription = None
+    if recording_url:
+        transcription = await _transcribe_recording(recording_url)
+
+    # Update DB with transcription
+    async with db_factory() as db:
+        cb = await db.get(CallbackRequest, callback_id)
+        if cb:
+            cb.transcription = transcription
+            await db.commit()
+
+    # Send email notification
+    from app.email_sender import send_callback_notification
+    await send_callback_notification(
+        caller_phone=caller_phone,
+        recording_url=recording_url,
+        transcription=transcription,
+        callback_id=callback_id,
+        created_at=datetime.now(),
+    )
 
 
 # ── Voice endpoints ──────────────────────────────────────────
@@ -443,11 +534,20 @@ async def twilio_gather(
     should_end = action_taken in (
         "human_transfer_offered",
         "session_ended",
+        "request_voicemail",
     )
 
     twiml = TwiML()
 
-    if action_taken == "human_transfer_offered" and settings.TWILIO_TRANSFER_NUMBER:
+    if action_taken == "request_voicemail":
+        # Play the bot's response ("Laissez un message après le bip...") then record
+        recording_action = f"{_base_url(request)}/api/v1/twilio/recording"
+        if audio_url:
+            twiml.play(audio_url)
+        else:
+            twiml.say(response_text, voice=_VOICE, language=_LANG)
+        twiml.record(action=recording_action, max_length=120, timeout=10)
+    elif action_taken == "human_transfer_offered" and settings.TWILIO_TRANSFER_NUMBER:
         if audio_url:
             twiml.play(audio_url)
         else:
@@ -516,6 +616,86 @@ async def twilio_status(
         metrics.inc("sessions_completed")
 
     return {"status": "ok", "call_sid": call_sid, "call_status": call_status}
+
+
+# ── Recording endpoint ───────────────────────────────────────
+
+
+@router.post("/recording")
+async def twilio_recording(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """
+    Handles Twilio <Record> callback.
+
+    Called by Twilio when a voicemail recording is complete.  Saves a
+    CallbackRequest to DB immediately, then kicks off a background task
+    to transcribe the audio and send an email notification to the salon.
+    Returns a TwiML goodbye + <Hangup>.
+    """
+    params = dict(await request.form())
+
+    call_sid = params.get("CallSid", "")
+    recording_url = params.get("RecordingUrl", "")
+    recording_duration = params.get("RecordingDuration", "0")
+    recording_status = params.get("RecordingStatus", "completed")
+
+    _slog.info(
+        "twilio_recording_received",
+        call_sid=call_sid[:12] if call_sid else "",
+        duration_s=recording_duration,
+        status=recording_status,
+    )
+
+    if recording_status != "completed":
+        return TwiML().hangup().response()
+
+    # Ensure .mp3 extension for playback
+    if recording_url and not recording_url.endswith(".mp3"):
+        recording_url += ".mp3"
+
+    # Retrieve caller phone from the active session
+    caller_phone: str | None = None
+    if call_sid:
+        state = await db_load_session(db, call_sid)
+        if state is None:
+            state = conversation_manager.get_session(call_sid)
+        if state:
+            caller_phone = state.client_phone
+
+    # Persist callback request immediately (transcription filled in background)
+    callback = CallbackRequest(
+        caller_phone=caller_phone,
+        recording_url=recording_url or None,
+        recording_duration=int(recording_duration) if recording_duration else None,
+        transcription=None,
+        status=CallbackRequestStatus.pending,
+    )
+    db.add(callback)
+    await db.commit()
+    await db.refresh(callback)
+
+    metrics.inc("voicemail_recorded")
+
+    # Background: transcribe + send email (non-blocking for caller)
+    background_tasks.add_task(
+        _process_recording_background,
+        callback.id,
+        recording_url or None,
+        caller_phone,
+    )
+
+    # Return goodbye immediately — caller hears it while background task runs
+    twiml = TwiML()
+    goodbye_audio = await _tts(_VOICEMAIL_GOODBYE, request, call_sid or "voicemail", 999)
+    if goodbye_audio:
+        twiml.play(goodbye_audio)
+    else:
+        twiml.say(_VOICEMAIL_GOODBYE, voice=_VOICE, language=_LANG)
+    twiml.hangup()
+    return twiml.response()
 
 
 # ── SMS endpoint ─────────────────────────────────────────────
