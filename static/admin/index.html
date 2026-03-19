@@ -2790,6 +2790,9 @@ async function saveSection(sectionId, keys) {
   if (!Object.keys(updates).length) {
     btn.disabled = false;
     btn.textContent = 'Enregistrer';
+    errEl.textContent = 'Aucune modification détectée.';
+    errEl.classList.remove('hidden');
+    setTimeout(() => errEl.classList.add('hidden'), 3000);
     return;
   }
 
@@ -2806,15 +2809,23 @@ async function saveSection(sectionId, keys) {
       throw new Error(err.detail || `HTTP ${r.status}`);
     }
     settingsData = await r.json();
-    showToast('Paramètres enregistrés');
-    // Clear password fields and re-render to update status badges
+    // Visual success state on the button
+    btn.textContent = '✓ Enregistré';
+    btn.style.background = 'var(--success, #16a34a)';
+    btn.style.color = '#fff';
+    setTimeout(() => {
+      btn.style.background = '';
+      btn.style.color = '';
+      btn.textContent = 'Enregistrer';
+    }, 2500);
     renderSettingsView();
   } catch (err) {
     errEl.textContent = err.message || 'Erreur lors de la sauvegarde.';
     errEl.classList.remove('hidden');
+    showToast(err.message || 'Erreur lors de la sauvegarde.', 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Enregistrer';
+    if (btn.textContent === 'Enregistrement…') btn.textContent = 'Enregistrer';
   }
 }
 
