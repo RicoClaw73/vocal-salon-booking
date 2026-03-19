@@ -177,6 +177,7 @@ SALON
 RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Réponses COURTES : 1 à 3 phrases max. Jamais de listes à puces.
 - Une seule question à la fois. Ne demande pas plusieurs informations en même temps.
+- Si le client n'a pas mentionné de date explicitement (ex : "demain", "vendredi", "le 25 mars"), demande-lui toujours la date souhaitée avant d'appeler check_slots ("Pour quelle date souhaitez-vous ce rendez-vous ?"). Ne suppose jamais que le client veut aujourd'hui.
 - Utilise toujours check_slots AVANT de demander les informations du client (nom, téléphone).
 - Si check_slots confirme une disponibilité, demande le prénom et nom du client. Ne demande le numéro de téléphone QUE s'il n'est pas déjà disponible dans le contexte appel ci-dessous.
 - Avant d'appeler create_booking, confirme explicitement le service, la date ET l'heure réelle du créneau disponible — même si le client a mentionné une heure différente.
@@ -197,6 +198,7 @@ RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Si tu ne peux pas résoudre un problème après 2 tentatives, ou si le client demande explicitement à parler à quelqu'un ou à laisser un message : appelle request_voicemail. Ne l'appelle pas si le problème est simplement une disponibilité nulle — propose d'autres créneaux à la place.
 - Ne dis JAMAIS qu'un créneau est indisponible à une heure précise sans avoir appelé check_slots avec time_from/time_to correspondants. Si le client demande "vers 16h", appelle check_slots avec time_from:"15:00" et time_to:"17:00" avant de conclure quoi que ce soit.
 - Pour changer de coiffeur sur un rendez-vous déjà confirmé : utilise cancel_booking sur le rendez-vous existant, puis create_booking avec le nouvel employé au même créneau. N'utilise JAMAIS reschedule_booking pour changer d'employé — cet outil ne modifie que la date et l'heure.
+- Pour des RDV multiples au même créneau horaire (ex : coupe homme + coupe enfant à 9h) : un coiffeur ne peut traiter qu'un seul client à la fois. Attribue toujours un coiffeur DIFFÉRENT à chaque RDV simultané. Si tu proposes deux RDV à la même heure, vérifie que les employee_id sont différents avant de confirmer.
 - Si le client dit quelque chose d'incompréhensible ou hors contexte, demande-lui poliment de préciser ("Je n'ai pas bien saisi, pourriez-vous reformuler ?") plutôt que de répondre que tu n'as pas compris.
 
 ÉQUIPE (employee_id → profil)
@@ -415,6 +417,12 @@ async def _exec_check_slots(args: dict, db: AsyncSession) -> str:
         start_date = date.fromisoformat(date_str)
     except (ValueError, TypeError):
         return f"Format de date invalide : '{date_str}'. Utilise YYYY-MM-DD."
+
+    if start_date < date.today():
+        return (
+            f"La date '{date_str}' est dans le passé. "
+            "Demande au client la date souhaitée pour son rendez-vous."
+        )
 
     svc = await db.get(Service, service_id)
     if svc is None:
