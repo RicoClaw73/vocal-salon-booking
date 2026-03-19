@@ -2744,7 +2744,7 @@ function renderSettingsView() {
         ${fieldsHtml}
         <div id="stg_err_${sectionId}" class="hidden text-xs text-red-500 mt-2"></div>
         <button class="save-section-btn" id="stg_save_${sectionId}"
-                onclick="saveSection('${sectionId}', ${JSON.stringify(items.map(i => i.key))})">
+                onclick="saveSection('${sectionId}', ${JSON.stringify(items.map(i => i.key)).replace(/"/g, "'")})">
           Enregistrer
         </button>
       </div>`;
