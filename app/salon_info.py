@@ -11,34 +11,44 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-_DATA_PATH = Path(__file__).parent.parent / "data" / "normalized" / "salon.json"
-_SALON: dict | None = None
+from app.config import settings
+
+_BASE_DIR = Path(__file__).parent.parent
+_DEFAULT_DATA_PATH = _BASE_DIR / "data" / "normalized" / "salon.json"
+
+# Per-tenant salon cache: slug → salon dict
+_salon_cache: dict[str, dict] = {}
 
 
-def _salon() -> dict:
-    global _SALON
-    if _SALON is None:
-        with open(_DATA_PATH, encoding="utf-8") as f:
-            _SALON = json.load(f)
-    return _SALON
+def _load_salon(tenant_slug: str = "default") -> dict:
+    if tenant_slug not in _salon_cache:
+        tenant_path = _BASE_DIR / "data" / "tenants" / tenant_slug / "salon.json"
+        path = tenant_path if tenant_path.exists() else _DEFAULT_DATA_PATH
+        with open(path, encoding="utf-8") as f:
+            _salon_cache[tenant_slug] = json.load(f)
+    return _salon_cache[tenant_slug]
+
+
+def _salon(tenant_slug: str = "default") -> dict:
+    return _load_salon(tenant_slug)
 
 
 # ── Topic → response builders ────────────────────────────────
 
-def _resp_address() -> str:
-    s = _salon()
+def _resp_address(slug: str, salon_name: str) -> str:
+    s = _salon(slug)
     adr = s["adresse"]
     metro = s["acces"]["metro"][0]
     return (
-        f"Maison Éclat est situé au {adr['rue']}, "
+        f"{salon_name} est situé au {adr['rue']}, "
         f"{adr['code_postal']} Paris, {adr['arrondissement']}, "
         f"quartier {adr['quartier']}. "
         f"Station de métro la plus proche : {metro}."
     )
 
 
-def _resp_hours() -> str:
-    h = _salon()["horaires"]
+def _resp_hours(slug: str, **_) -> str:
+    h = _salon(slug)["horaires"]
     return (
         "Nous sommes ouverts du mardi au samedi. "
         f"Mardi et mercredi de {h['mardi']['debut']} à {h['mardi']['fin']}, "
@@ -49,8 +59,8 @@ def _resp_hours() -> str:
     )
 
 
-def _resp_contact() -> str:
-    c = _salon()["contact"]
+def _resp_contact(slug: str, **_) -> str:
+    c = _salon(slug)["contact"]
     return (
         f"Vous pouvez nous joindre par téléphone au {c['telephone']}, "
         f"par email à {c['email']}, "
@@ -59,16 +69,16 @@ def _resp_contact() -> str:
     )
 
 
-def _resp_price() -> str:
-    faq = _salon()["faq"]
+def _resp_price(slug: str, **_) -> str:
+    faq = _salon(slug)["faq"]
     return (
         f"{faq['prix_moyen']} "
         "Un devis gratuit est proposé avant toute prestation technique importante."
     )
 
 
-def _resp_team() -> str:
-    eq = _salon()["equipe"]
+def _resp_team(slug: str, **_) -> str:
+    eq = _salon(slug)["equipe"]
     langues = ", ".join(eq["langues"])
     return (
         f"Notre équipe comprend {eq['taille']} professionnels : {eq['description']}. "
@@ -76,8 +86,8 @@ def _resp_team() -> str:
     )
 
 
-def _resp_payment() -> str:
-    p = _salon()["paiements"]
+def _resp_payment(slug: str, **_) -> str:
+    p = _salon(slug)["paiements"]
     moyens = ", ".join(p["acceptes"][:4])
     return (
         f"Nous acceptons : {moyens}. "
@@ -85,8 +95,8 @@ def _resp_payment() -> str:
     )
 
 
-def _resp_policy() -> str:
-    pol = _salon()["politique"]
+def _resp_policy(slug: str, **_) -> str:
+    pol = _salon(slug)["politique"]
     return (
         "Nous travaillons uniquement sur rendez-vous. "
         f"{pol['annulation']['description']} "
@@ -94,9 +104,9 @@ def _resp_policy() -> str:
     )
 
 
-def _resp_parking() -> str:
-    acc = _salon()["acces"]
-    faq = _salon()["faq"]
+def _resp_parking(slug: str, **_) -> str:
+    acc = _salon(slug)["acces"]
+    faq = _salon(slug)["faq"]
     metros = "; ".join(acc["metro"][:2])
     return (
         f"{faq['parking']} "
@@ -105,21 +115,21 @@ def _resp_parking() -> str:
     )
 
 
-def _resp_products() -> str:
-    prods = _salon()["produits"]
+def _resp_products(slug: str, **_) -> str:
+    prods = _salon(slug)["produits"]
     listed = ", ".join(prods[:4])
-    certs = "; ".join(_salon()["certifications"][:2])
+    certs = "; ".join(_salon(slug)["certifications"][:2])
     return (
         f"Nous utilisons des produits professionnels haut de gamme : {listed}. "
         f"Certifications : {certs}."
     )
 
 
-def _resp_services() -> str:
-    specs = _salon()["specialites"]
+def _resp_services(slug: str, salon_name: str) -> str:
+    specs = _salon(slug)["specialites"]
     listed = " | ".join(specs[:3])
     return (
-        f"Maison Éclat propose : {listed}. "
+        f"{salon_name} propose : {listed}. "
         "Souhaitez-vous plus de détails sur une prestation particulière ?"
     )
 
@@ -135,41 +145,45 @@ _TOPIC_HANDLERS: dict[str, callable] = {
     "parking": _resp_parking,
     "products": _resp_products,
     "services": _resp_services,
-    "faq_wifi": lambda: _salon()["faq"]["wifi"],
-    "faq_animals": lambda: _salon()["faq"]["animaux"],
-    "faq_loyalty": lambda: _salon()["faq"]["carte_fidelite"],
-    "faq_gift": lambda: _salon()["faq"]["bon_cadeau"],
+    "faq_wifi": lambda slug, **_: _salon(slug)["faq"]["wifi"],
+    "faq_animals": lambda slug, **_: _salon(slug)["faq"]["animaux"],
+    "faq_loyalty": lambda slug, **_: _salon(slug)["faq"]["carte_fidelite"],
+    "faq_gift": lambda slug, **_: _salon(slug)["faq"]["bon_cadeau"],
 }
 
 
 # ── Public API ───────────────────────────────────────────────
 
-def get_info_response(info_topic: str | None, raw_text: str = "") -> str:
+def get_info_response(
+    info_topic: str | None,
+    raw_text: str = "",
+    tenant_slug: str = "default",
+) -> str:
     """
     Return a voice-friendly response for a get_info intent.
 
     Args:
-        info_topic: Resolved topic key (from entity extraction or LLM).
-                    One of: address, hours, contact, price, team, payment,
-                    policy, parking, products, services, faq_wifi, faq_animals,
-                    faq_loyalty, faq_gift.
-        raw_text:   Original user utterance (used for heuristic fallback when
-                    info_topic is None).
+        info_topic:   Resolved topic key (from entity extraction or LLM).
+        raw_text:     Original user utterance (fallback heuristic).
+        tenant_slug:  Tenant slug for per-tenant salon.json lookup.
 
     Returns:
         A French, voice-friendly string ready for TTS.
     """
+    salon_name = settings.SALON_NAME
+
     topic = info_topic or _guess_topic(raw_text.lower())
     handler = _TOPIC_HANDLERS.get(topic)
     if handler:
-        return handler()
-    return _resp_general()
+        return handler(slug=tenant_slug, salon_name=salon_name)
+    return _resp_general(slug=tenant_slug, salon_name=salon_name)
 
 
-def _resp_general() -> str:
-    s = _salon()
+def _resp_general(slug: str = "default", salon_name: str = "") -> str:
+    s = _salon(slug)
+    name = salon_name or settings.SALON_NAME
     return (
-        f"Maison Éclat est un salon de coiffure haut de gamme situé au "
+        f"{name} est un salon de coiffure haut de gamme situé au "
         f"{s['adresse']['rue']}, Paris {s['adresse']['arrondissement']}. "
         "Nous sommes ouverts du mardi au samedi. "
         f"Pour plus d'informations, appelez-nous au {s['contact']['telephone']} "

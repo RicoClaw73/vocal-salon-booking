@@ -66,11 +66,11 @@ async def send_owner_booking_email(
         f"<td style='padding:6px 0'>{phone_display}</td></tr>"
         "</table>"
         "<p style='margin-top:24px;color:#94a3b8;font-size:13px'>"
-        "Maison Éclat — Tableau de bord → Réservations</p>"
+        f"{settings.SALON_NAME} — Tableau de bord → Réservations</p>"
         "</div>"
     ).format(booking_id=booking_id)
 
-    subject = f"[Maison Éclat] Nouveau RDV #{booking_id} — {client_name}"
+    subject = f"[{settings.SALON_NAME}] Nouveau RDV #{booking_id} — {client_name}"
 
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
@@ -137,7 +137,7 @@ async def send_callback_notification(
 
     lines.append(
         "<p style='margin-top:24px;color:#94a3b8;font-size:13px'>"
-        "Maison Éclat — Tableau de bord → onglet Rappels</p>"
+        f"{settings.SALON_NAME} — Tableau de bord → onglet Rappels</p>"
     )
 
     html = (
@@ -147,7 +147,7 @@ async def send_callback_notification(
     )
 
     subject = (
-        f"[Maison Éclat] Rappel #{callback_id} — {phone_display}"
+        f"[{settings.SALON_NAME}] Rappel #{callback_id} — {phone_display}"
     )
 
     try:

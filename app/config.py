@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = f"sqlite+aiosqlite:///{BASE_DIR / 'salon.db'}"
 
     # ── App ───────────────────────────────────────────────────
-    APP_TITLE: str = "Maison Éclat – Salon Booking API"
+    APP_TITLE: str = "Salon Booking API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = True
 
@@ -139,7 +139,28 @@ class Settings(BaseSettings):
     # Email address to receive callback request notifications.
     SALON_EMAIL: str = ""
     # From address shown in notification emails.
-    SALON_EMAIL_FROM: str = "notifications@maison-eclat.fr"
+    SALON_EMAIL_FROM: str = ""
+
+    # ── Salon identity & Agent vocal ──────────────────────────
+    # These drive all user-facing messages: greetings, SMS, emails, system prompt.
+    # Override via salon_settings DB (dashboard Gérant tab) or .env.
+    SALON_NAME: str = "Maison Éclat"
+    SALON_NAME_SHORT: str = "Maison Eclat"        # SMS footer (GSM-7 safe: no é)
+    SALON_ADDRESS_SHORT: str = "42 r. des Petits-Champs, Paris 2e"  # SMS footer
+    AGENT_NAME: str = "Marine"
+    AGENT_DESCRIPTION: str = "réceptionniste IA"
+    GREETING_TEXT: str = (
+        "Bonjour et bienvenue chez Maison Éclat, votre salon de coiffure ! "
+        "Cet appel peut être enregistré à des fins d'amélioration de notre service. "
+        "Je peux vous aider à prendre rendez-vous, modifier ou annuler une réservation. "
+        "Comment puis-je vous aider ?"
+    )
+    GOODBYE_TEXT: str = "Merci d'avoir appelé Maison Éclat. À bientôt !"
+    VOICEMAIL_TEXT: str = (
+        "Je vous passe en messagerie vocale. "
+        "Veuillez laisser votre message après le signal sonore. "
+        "Le salon vous rappellera dès que possible."
+    )
 
     # ── Telephony – Phase 5.4: Pilot real-call flow ───────────
     # Twilio webhook URL for signature verification (must match the URL

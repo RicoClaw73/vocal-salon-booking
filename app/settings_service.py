@@ -2,9 +2,12 @@
 Runtime settings service.
 
 Provides a DB-backed override layer on top of pydantic-settings env vars.
-On startup, load_settings_from_db() reads SalonSetting rows and patches the
-global `settings` object so all consumers (SMS, email, reminder loop, etc.)
-pick up the DB values transparently.
+On startup, load_settings_from_db() reads SalonSetting rows for a given tenant
+and caches a per-tenant Settings copy in _tenant_settings.
+
+get_tenant_settings(tenant_id) returns the per-tenant Settings object (or the
+global settings singleton as fallback). All salon-specific code should use this
+instead of the global `settings` when a tenant context is available.
 
 Editable settings are defined in SETTINGS_METADATA — a declarative list that
 drives both the API and the dashboard UI.
@@ -20,6 +23,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import SalonSetting
 
+# ── Per-tenant settings cache ─────────────────────────────────────────────────
+# Populated at startup by load_settings_from_db(). Key = tenant_id.
+
+_tenant_settings: dict[int, Any] = {}
+
+
+def get_tenant_settings(tenant_id: int) -> Any:
+    """Return the per-tenant Settings copy, or the global settings as fallback."""
+    return _tenant_settings.get(tenant_id, settings)
+
+
 # ── Settings metadata ────────────────────────────────────────────────────────
 
 SETTINGS_METADATA: list[dict[str, Any]] = [
@@ -27,6 +41,82 @@ SETTINGS_METADATA: list[dict[str, Any]] = [
     # TAB: gerant  (paramètres métier du salon)
     # ══════════════════════════════════════════
 
+    # ── Salon & Agent vocal ──────────────────────────────────
+    {
+        "key": "SALON_NAME",
+        "label": "Nom du salon",
+        "description": "Nom complet utilisé dans les emails, SMS et messages vocaux.",
+        "section": "Salon & Agent vocal",
+        "tab": "gerant",
+        "type": "str",
+        "is_sensitive": False,
+    },
+    {
+        "key": "SALON_NAME_SHORT",
+        "label": "Nom court (SMS)",
+        "description": "Version courte sans accents pour les SMS GSM-7 (ex: Maison Eclat).",
+        "section": "Salon & Agent vocal",
+        "tab": "gerant",
+        "type": "str",
+        "is_sensitive": False,
+    },
+    {
+        "key": "SALON_ADDRESS_SHORT",
+        "label": "Adresse courte (pied de SMS)",
+        "description": "Adresse condensée affichée dans le pied de SMS (ex: 42 r. des Petits-Champs, Paris 2e).",
+        "section": "Salon & Agent vocal",
+        "tab": "gerant",
+        "type": "str",
+        "is_sensitive": False,
+    },
+    {
+        "key": "AGENT_NAME",
+        "label": "Nom de l'agent vocal",
+        "description": "Prénom affiché dans le system prompt du LLM (ex: Marine).",
+        "section": "Salon & Agent vocal",
+        "tab": "gerant",
+        "type": "str",
+        "is_sensitive": False,
+    },
+    {
+        "key": "AGENT_DESCRIPTION",
+        "label": "Rôle de l'agent vocal",
+        "description": "Description du rôle utilisée dans le system prompt (ex: réceptionniste IA).",
+        "section": "Salon & Agent vocal",
+        "tab": "gerant",
+        "type": "str",
+        "is_sensitive": False,
+    },
+    {
+        "key": "GREETING_TEXT",
+        "label": "Message d'accueil",
+        "description": "Texte prononcé à l'arrivée de l'appel. Toute modification recrée le cache audio ElevenLabs.",
+        "section": "Salon & Agent vocal",
+        "tab": "gerant",
+        "type": "str",
+        "multiline": True,
+        "is_sensitive": False,
+    },
+    {
+        "key": "GOODBYE_TEXT",
+        "label": "Message d'au revoir",
+        "description": "Texte prononcé lors du raccroché.",
+        "section": "Salon & Agent vocal",
+        "tab": "gerant",
+        "type": "str",
+        "multiline": True,
+        "is_sensitive": False,
+    },
+    {
+        "key": "VOICEMAIL_TEXT",
+        "label": "Message messagerie vocale",
+        "description": "Texte prononcé avant que le client enregistre un message vocal.",
+        "section": "Salon & Agent vocal",
+        "tab": "gerant",
+        "type": "str",
+        "multiline": True,
+        "is_sensitive": False,
+    },
     # ── Salon & Gérant ───────────────────────────────────────
     {
         "key": "OWNER_PHONE",
@@ -191,8 +281,8 @@ _VALID_KEYS: frozenset[str] = frozenset(m["key"] for m in SETTINGS_METADATA)
 
 # ── Internal helpers ─────────────────────────────────────────────────────────
 
-def _apply_to_settings(key: str, raw: str) -> None:
-    """Cast `raw` to the expected Python type and patch the global settings object."""
+def _apply_to_settings_obj(target: Any, key: str, raw: str) -> None:
+    """Cast `raw` to the expected Python type and set it on `target` settings obj."""
     meta = next((m for m in SETTINGS_METADATA if m["key"] == key), None)
     if meta is None:
         return
@@ -203,7 +293,7 @@ def _apply_to_settings(key: str, raw: str) -> None:
             value = int(raw)
         else:
             value = raw
-        setattr(settings, key, value)
+        setattr(target, key, value)
     except (ValueError, TypeError):
         pass  # ignore malformed DB values — env var default remains
 
@@ -217,42 +307,62 @@ def _mask(value: str) -> str:
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-async def load_settings_from_db(session: AsyncSession) -> None:
+async def load_settings_from_db(session: AsyncSession, tenant_id: int) -> None:
     """
-    Called once at app startup.
-    Reads all SalonSetting rows and patches the global `settings` object.
+    Load SalonSetting rows for `tenant_id` and cache a per-tenant Settings copy.
+    Also patches the global `settings` object for backward compatibility when
+    the default tenant is loaded.
     """
-    result = await session.execute(select(SalonSetting))
+    result = await session.execute(
+        select(SalonSetting).where(SalonSetting.tenant_id == tenant_id)
+    )
     rows = result.scalars().all()
+
+    # Build per-tenant settings copy from global defaults
+    tenant_cfg = settings.model_copy()
     for row in rows:
         if row.key in _VALID_KEYS and row.value is not None:
-            _apply_to_settings(row.key, row.value)
+            _apply_to_settings_obj(tenant_cfg, row.key, row.value)
+
+    _tenant_settings[tenant_id] = tenant_cfg
+
+    # Also patch global settings for the default tenant (backward compat)
+    for row in rows:
+        if row.key in _VALID_KEYS and row.value is not None:
+            _apply_to_settings_obj(settings, row.key, row.value)
 
 
-async def update_settings(session: AsyncSession, updates: dict[str, str]) -> None:
+async def update_settings(
+    session: AsyncSession,
+    tenant_id: int,
+    updates: dict[str, str],
+) -> None:
     """
-    Upsert DB rows for `updates` (key→raw_string) then patch `settings` in memory.
+    Upsert DB rows for `updates` (key→raw_string) scoped to `tenant_id`,
+    then refresh the in-memory cache for that tenant.
     Unknown keys are silently ignored.
     """
     for key, raw in updates.items():
         if key not in _VALID_KEYS:
             continue
-        # merge() does INSERT or UPDATE based on primary key — works with SQLite & PostgreSQL
-        row = SalonSetting(key=key, value=raw)
+        row = SalonSetting(tenant_id=tenant_id, key=key, value=raw)
         await session.merge(row)
-        _apply_to_settings(key, raw)
     await session.commit()
 
+    # Refresh cache for this tenant
+    await load_settings_from_db(session, tenant_id)
 
-def get_settings_with_values() -> list[dict[str, Any]]:
+
+def get_settings_with_values(tenant_id: int) -> list[dict[str, Any]]:
     """
-    Return SETTINGS_METADATA enriched with the current effective value of each setting.
+    Return SETTINGS_METADATA enriched with the current effective value for `tenant_id`.
     Sensitive values are masked unless empty.
     """
+    tenant_cfg = get_tenant_settings(tenant_id)
     result = []
     for meta in SETTINGS_METADATA:
         key = meta["key"]
-        raw: Any = getattr(settings, key, "")
+        raw: Any = getattr(tenant_cfg, key, "")
         # Normalise to string for the API response
         if isinstance(raw, bool):
             str_val = "true" if raw else "false"
