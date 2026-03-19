@@ -18,9 +18,10 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import Booking, BookingStatus, CallbackRequest, CallbackRequestStatus, Employee, Service
+from app.models import Booking, BookingStatus, CallbackRequest, CallbackRequestStatus, Employee, Service, VoiceSession
 from app.routers.bookings import _booking_to_out
 from app.schemas import BookingOut
+from app.session_store import get_transcript_events
 from app.settings_service import get_settings_with_values, update_settings
 
 
@@ -42,6 +43,20 @@ class CallbackOut(BaseModel):
 class CallbackPatch(BaseModel):
     status: str | None = None
     notes: str | None = None
+
+
+class VoiceSessionOut(BaseModel):
+    session_id: str
+    status: str
+    turns: int
+    client_name: str | None
+    client_phone: str | None
+    channel: str
+    current_intent: str | None
+    created_at: datetime
+    last_activity: datetime
+
+    model_config = {"from_attributes": True}
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -290,3 +305,38 @@ async def patch_settings(
         raise HTTPException(status_code=400, detail="Aucun paramètre fourni.")
     await update_settings(db, body)
     return get_settings_with_values()
+
+
+# ── Voice Sessions ─────────────────────────────────────────────
+
+@router.get("/sessions", response_model=list[VoiceSessionOut])
+async def list_sessions(
+    token: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+) -> list[VoiceSessionOut]:
+    """Return the 50 most recent voice call sessions, newest first."""
+    _require_token(token)
+    result = await db.execute(
+        select(VoiceSession)
+        .order_by(VoiceSession.last_activity.desc())
+        .limit(50)
+    )
+    sessions = result.scalars().all()
+    return [VoiceSessionOut.model_validate(s) for s in sessions]
+
+
+@router.get("/sessions/{session_id}")
+async def get_session_detail(
+    session_id: str,
+    token: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return a voice session with its full turn-by-turn transcript."""
+    _require_token(token)
+    session = await db.get(VoiceSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session introuvable.")
+    transcript = await get_transcript_events(db, session_id)
+    out = VoiceSessionOut.model_validate(session).model_dump()
+    out["transcript"] = transcript
+    return out

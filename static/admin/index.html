@@ -287,6 +287,30 @@
     }
     .save-section-btn:hover { background: #6d28d9; }
     .save-section-btn:disabled { background: #c4b5fd; cursor: not-allowed; }
+
+    /* ── Sessions view ── */
+    .session-card {
+      background: #fff; border: 1px solid #f1f5f9;
+      border-radius: 14px; padding: 14px 16px;
+      cursor: pointer; transition: box-shadow .15s;
+    }
+    .session-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.10); }
+    .transcript-wrap { display: flex; flex-direction: column; gap: 10px; }
+    .transcript-turn { display: flex; flex-direction: column; gap: 4px; }
+    .transcript-bubble-user {
+      background: #f1f5f9; border-radius: 14px 14px 14px 4px;
+      padding: 8px 12px; font-size: 13px; color: #334155;
+      max-width: 80%; align-self: flex-start;
+    }
+    .transcript-bubble-bot {
+      background: #eef2ff; border-radius: 14px 14px 4px 14px;
+      padding: 8px 12px; font-size: 13px; color: #3730a3;
+      max-width: 80%; align-self: flex-end;
+    }
+    .transcript-meta {
+      font-size: 11px; color: #94a3b8; margin-top: 2px;
+    }
+    .transcript-meta.right { text-align: right; }
   </style>
 </head>
 
@@ -432,6 +456,12 @@
         <i data-lucide="bar-chart-2" class="w-3.5 h-3.5"></i>
         <span class="hidden sm:block">Stats</span>
       </button>
+      <button onclick="setView('sessions')" id="btnSessions"
+              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
+                     transition flex items-center gap-1.5 text-xs font-medium">
+        <i data-lucide="phone-call" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:block">Appels</span>
+      </button>
       <button onclick="setView('settings')" id="btnSettings"
               class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
                      transition flex items-center gap-1.5 text-xs font-medium">
@@ -570,6 +600,22 @@
       </div>
 
       <div id="settingsSections" class="flex flex-col gap-5"></div>
+    </div>
+  </div>
+
+  <!-- ── Sessions view ──────────────────────── -->
+  <div id="sessionsView" class="hidden flex-1 overflow-y-auto scroll">
+    <div class="max-w-2xl mx-auto px-4 py-6 pb-24">
+      <div class="flex items-center gap-2 mb-5">
+        <span class="text-sm font-semibold text-slate-700">Appels vocaux</span>
+        <div class="flex-1"></div>
+        <button onclick="loadSessionsView()" title="Rafraîchir"
+                class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100
+                       text-slate-400 transition">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+      <div id="sessionsList"></div>
     </div>
   </div>
 
@@ -1199,11 +1245,13 @@ function setView(v, silent = false) {
   const callbacksView  = document.getElementById('callbacksView');
   const statsView      = document.getElementById('statsView');
   const settingsView   = document.getElementById('settingsView');
+  const sessionsView   = document.getElementById('sessionsView');
   const btnCal         = document.getElementById('btnCal');
   const btnList        = document.getElementById('btnList');
   const btnCallbacks   = document.getElementById('btnCallbacks');
   const btnStats       = document.getElementById('btnStats');
   const btnSettings    = document.getElementById('btnSettings');
+  const btnSessions    = document.getElementById('btnSessions');
   const empBar         = document.getElementById('empBar');
   const histToggle     = document.getElementById('histToggle');
   const on  = 'bg-white shadow-sm text-slate-700';
@@ -1214,11 +1262,13 @@ function setView(v, silent = false) {
   callbacksView.classList.add('hidden');
   statsView.classList.add('hidden');
   settingsView.classList.add('hidden');
+  sessionsView.classList.add('hidden');
   btnCal.className       = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
   btnList.className      = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
   btnCallbacks.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium relative ${off}`;
   btnStats.className     = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
   btnSettings.className  = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
+  btnSessions.className  = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
 
   if (v === 'calendar') {
     calView.classList.remove('hidden');
@@ -1244,6 +1294,12 @@ function setView(v, silent = false) {
     empBar.classList.add('hidden');
     histToggle.classList.add('hidden');
     loadSettingsView();
+  } else if (v === 'sessions') {
+    sessionsView.classList.remove('hidden');
+    btnSessions.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    empBar.classList.add('hidden');
+    histToggle.classList.add('hidden');
+    loadSessionsView();
   } else {
     // callbacks
     callbacksView.classList.remove('hidden');
@@ -1252,7 +1308,7 @@ function setView(v, silent = false) {
     histToggle.classList.add('hidden');
     renderCallbacks();
   }
-  if (!silent && v !== 'callbacks' && v !== 'stats') render();
+  if (!silent && v !== 'callbacks' && v !== 'stats' && v !== 'sessions') render();
 }
 
 // ── Refresh countdown ──────────────────────────────────────────────
@@ -1697,6 +1753,7 @@ function renderStats() {
 // ── Settings View ────────────────────────────────────────────────────
 let settingsData = [];
 let settingsTab = 'gerant';
+let techniqueUnlocked = false;
 
 function setSettingsTab(tab) {
   settingsTab = tab;
@@ -1705,11 +1762,65 @@ function setSettingsTab(tab) {
   document.getElementById('stgTabGerant').className    = `px-4 py-1.5 rounded-lg text-sm font-medium transition ${tab === 'gerant'    ? on : off}`;
   document.getElementById('stgTabTechnique').className = `px-4 py-1.5 rounded-lg text-sm font-medium transition ${tab === 'technique' ? on : off}`;
   const banner = document.getElementById('stgTechBanner');
-  tab === 'technique' ? banner.classList.remove('hidden') : banner.classList.add('hidden');
+  if (tab === 'technique') {
+    if (!techniqueUnlocked) {
+      banner.classList.add('hidden');
+      renderTechniqueLock();
+      return;
+    }
+    banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
+  }
   renderSettingsView();
 }
 
+function renderTechniqueLock() {
+  document.getElementById('settingsSections').innerHTML = `
+    <div class="flex flex-col items-center justify-center py-16 gap-4">
+      <div class="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
+        <svg class="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+      </div>
+      <div class="text-center">
+        <p class="font-semibold text-slate-700 text-lg">Accès restreint</p>
+        <p class="text-sm text-slate-500 mt-1">Cette section est réservée à l'intégrateur technique.</p>
+      </div>
+      <div class="flex flex-col gap-2 w-full max-w-xs">
+        <input type="password" id="techniquePassword" placeholder="Mot de passe"
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          onkeydown="if(event.key==='Enter') unlockTechnique()">
+        <p id="techniqueError" class="text-xs text-red-500 hidden">Mot de passe incorrect.</p>
+        <button onclick="unlockTechnique()"
+          class="w-full bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium py-2 rounded-lg transition">
+          Déverrouiller
+        </button>
+      </div>
+    </div>`;
+  setTimeout(() => {
+    const inp = document.getElementById('techniquePassword');
+    if (inp) inp.focus();
+  }, 50);
+}
+
+function unlockTechnique() {
+  const inp = document.getElementById('techniquePassword');
+  if (!inp) return;
+  if (inp.value === 'admin') {
+    techniqueUnlocked = true;
+    document.getElementById('stgTechBanner').classList.remove('hidden');
+    renderSettingsView();
+  } else {
+    document.getElementById('techniqueError').classList.remove('hidden');
+    inp.value = '';
+    inp.focus();
+  }
+}
+
 async function loadSettingsView() {
+  techniqueUnlocked = false;
   const p = new URLSearchParams();
   if (token) p.append('token', token);
   try {
@@ -1721,6 +1832,140 @@ async function loadSettingsView() {
     document.getElementById('settingsSections').innerHTML =
       '<p class="text-sm text-slate-400 text-center py-8">Erreur de chargement des paramètres.</p>';
   }
+}
+
+// ── Sessions View ─────────────────────────────────────────────────────
+let sessionsData = [];
+let selectedSessionId = null;
+
+async function loadSessionsView() {
+  const container = document.getElementById('sessionsList');
+  container.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Chargement…</p>';
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  try {
+    const r = await fetch(`/api/v1/admin/sessions?${p}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    sessionsData = await r.json();
+    selectedSessionId = null;
+    renderSessionsView();
+  } catch {
+    container.innerHTML =
+      '<p class="text-sm text-slate-400 text-center py-8">Erreur de chargement des sessions.</p>';
+  }
+}
+
+function renderSessionsView() {
+  const container = document.getElementById('sessionsList');
+  if (!sessionsData.length) {
+    container.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+        <i data-lucide="phone-off" class="w-8 h-8 opacity-40"></i>
+        <p class="text-sm">Aucune session vocale enregistrée.</p>
+      </div>`;
+    lucide.createIcons();
+    return;
+  }
+  container.innerHTML = '';
+  sessionsData.forEach(s => {
+    const date = new Date(s.last_activity);
+    const dateStr = date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+    const timeStr = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const phone = s.client_phone || s.client_name || 'Inconnu';
+    const statusBadge = {
+      active:    'bg-blue-100 text-blue-700',
+      completed: 'bg-emerald-100 text-emerald-700',
+      expired:   'bg-slate-100 text-slate-500',
+    }[s.status] || 'bg-slate-100 text-slate-500';
+    const statusLabel = { active: 'En cours', completed: 'Terminé', expired: 'Expiré' }[s.status] || s.status;
+    const isOpen = selectedSessionId === s.session_id;
+
+    const card = document.createElement('div');
+    card.className = `session-card mb-3 ${isOpen ? 'ring-2 ring-indigo-200' : ''}`;
+    card.innerHTML = `
+      <div class="flex items-center gap-3 cursor-pointer" onclick="openSessionDetail('${s.session_id}')">
+        <div class="w-9 h-9 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0">
+          <i data-lucide="phone" class="w-4 h-4 text-indigo-400"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold text-slate-700 truncate">${phone}</span>
+            <span class="cb-badge ${statusBadge} text-[11px]">${statusLabel}</span>
+          </div>
+          <div class="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+            <span>${dateStr} · ${timeStr}</span>
+            <span>·</span>
+            <span>${s.turns} tour${s.turns !== 1 ? 's' : ''}</span>
+            ${s.channel !== 'phone' ? `<span>· ${s.channel}</span>` : ''}
+          </div>
+        </div>
+        <i data-lucide="${isOpen ? 'chevron-up' : 'chevron-down'}" class="w-4 h-4 text-slate-300 flex-shrink-0"></i>
+      </div>
+      <div id="transcript_${s.session_id}" class="${isOpen ? '' : 'hidden'} mt-4 border-t border-slate-100 pt-4"></div>`;
+    container.appendChild(card);
+  });
+  lucide.createIcons();
+
+  // If a session was open, re-load its transcript
+  if (selectedSessionId) {
+    const el = document.getElementById(`transcript_${selectedSessionId}`);
+    if (el && !el.innerHTML.trim()) fetchAndRenderTranscript(selectedSessionId);
+  }
+}
+
+async function openSessionDetail(sessionId) {
+  if (selectedSessionId === sessionId) {
+    selectedSessionId = null;
+    renderSessionsView();
+    return;
+  }
+  selectedSessionId = sessionId;
+  renderSessionsView();
+  await fetchAndRenderTranscript(sessionId);
+}
+
+async function fetchAndRenderTranscript(sessionId) {
+  const el = document.getElementById(`transcript_${sessionId}`);
+  if (!el) return;
+  el.innerHTML = '<p class="text-xs text-slate-400 text-center py-3">Chargement…</p>';
+  const p = new URLSearchParams();
+  if (token) p.append('token', token);
+  try {
+    const r = await fetch(`/api/v1/admin/sessions/${sessionId}?${p}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    el.innerHTML = renderTranscript(data.transcript);
+    lucide.createIcons();
+  } catch {
+    el.innerHTML = '<p class="text-xs text-red-400 text-center py-3">Erreur de chargement du transcript.</p>';
+  }
+}
+
+function renderTranscript(events) {
+  if (!events || !events.length) {
+    return '<p class="text-xs text-slate-400 text-center py-3">Aucun transcript disponible.</p>';
+  }
+  let html = '<div class="transcript-wrap">';
+  events.forEach(ev => {
+    const intentTag = ev.intent ? `<span class="inline-block bg-violet-100 text-violet-600 text-[10px] font-medium px-1.5 py-0.5 rounded-full mr-1">${ev.intent}</span>` : '';
+    const actionTag = ev.action_taken ? `<span class="inline-block bg-amber-100 text-amber-700 text-[10px] font-medium px-1.5 py-0.5 rounded-full">${ev.action_taken}</span>` : '';
+    html += `<div class="transcript-turn">`;
+    if (ev.user_text) {
+      html += `<div>
+        <div class="transcript-bubble-user">${ev.user_text}</div>
+        <div class="transcript-meta">${intentTag}Tour ${ev.turn_number}</div>
+      </div>`;
+    }
+    if (ev.response_text) {
+      html += `<div class="flex flex-col items-end">
+        <div class="transcript-bubble-bot">${ev.response_text}</div>
+        <div class="transcript-meta right">${actionTag}</div>
+      </div>`;
+    }
+    html += `</div>`;
+  });
+  html += '</div>';
+  return html;
 }
 
 function renderSettingsView() {
