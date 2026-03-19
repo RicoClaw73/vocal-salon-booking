@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr" class="h-full">
+<html lang="fr" class="h-full" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,97 +9,340 @@
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          fontFamily: { sans: ['DM Sans', 'system-ui', 'sans-serif'] },
           colors: {
-            brand: { 50:'#faf5ff', 100:'#f3e8ff', 200:'#e9d5ff',
-                     500:'#a855f7', 600:'#9333ea', 700:'#7e22ce' }
+            brand: { 50:'#fdf8f0', 100:'#f5e8d0', 200:'#e8c990',
+                     500:'#C4913A', 600:'#9B6B2C', 700:'#7A5220' }
           }
         }
       }
     }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 
   <style>
+    /* ═══════════════════════════════════════════════════════
+       DESIGN SYSTEM — MAISON ÉCLAT
+       Luxe sobre parisien · ivoire/charbon/or
+    ════════════════════════════════════════════════════════ */
+    :root {
+      --bg:            #F6F1E9;
+      --surface:       #FDFAF5;
+      --surface-2:     #EFE9DF;
+      --border:        #E2D9CB;
+      --border-subtle: #EBE5D9;
+      --text:          #1A1612;
+      --text-2:        #6C5F52;
+      --text-3:        #A09386;
+      --accent:        #9B6B2C;
+      --accent-2:      #C4913A;
+      --today-bg:      #1A1612;
+      --today-text:    #F6F1E9;
+      --hour-line:     rgba(26,22,18,0.055);
+      --half-line:     rgba(26,22,18,0.028);
+      --shadow-card:   rgba(26,22,18,0.09);
+      --shadow-sm:     rgba(26,22,18,0.06);
+      --appt-alpha:    0.10;
+      --t:             0.32s ease;
+    }
+    [data-theme="dark"] {
+      --bg:            #0D0B09;
+      --surface:       #131110;
+      --surface-2:     #1C1916;
+      --border:        #2C2620;
+      --border-subtle: #211D1A;
+      --text:          #EDE8DF;
+      --text-2:        #9B9389;
+      --text-3:        #5A5450;
+      --accent:        #C9A96E;
+      --accent-2:      #D4B87A;
+      --today-bg:      #C9A96E;
+      --today-text:    #0D0B09;
+      --hour-line:     rgba(255,255,255,0.038);
+      --half-line:     rgba(255,255,255,0.018);
+      --shadow-card:   rgba(0,0,0,0.4);
+      --shadow-sm:     rgba(0,0,0,0.25);
+      --appt-alpha:    0.17;
+    }
+
+    /* Grain texture — papier de qualité */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      pointer-events: none; z-index: 9999;
+      opacity: 0.022;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23g)'/%3E%3C/svg%3E");
+      background-size: 400px 400px;
+    }
+
+    /* ── Topbar ── */
+    .topbar {
+      height: 60px; flex-shrink: 0;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; padding: 0 18px;
+      position: relative; z-index: 100;
+      transition: background var(--t), border-color var(--t);
+    }
+    .logo {
+      display: flex; align-items: center; gap: 9px;
+      padding-right: 18px; border-right: 1px solid var(--border-subtle);
+      flex-shrink: 0; transition: border-color var(--t);
+    }
+    .logo-badge {
+      width: 28px; height: 28px; border: 1.5px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: border-color var(--t);
+    }
+    .logo-badge span {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 15px; font-weight: 500; font-style: italic;
+      color: var(--accent); line-height: 1; transition: color var(--t);
+    }
+    .logo-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 15px; font-weight: 400; letter-spacing: 0.13em;
+      text-transform: uppercase; color: var(--text); white-space: nowrap;
+      transition: color var(--t);
+    }
+    .week-nav {
+      display: flex; align-items: center; gap: 2px;
+      padding: 0 14px; border-right: 1px solid var(--border-subtle);
+      flex-shrink: 0; transition: border-color var(--t);
+    }
+    .icon-btn {
+      width: 26px; height: 26px; background: none; border: none;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-3); border-radius: 3px;
+      transition: background 0.14s, color 0.14s;
+    }
+    .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+    .week-range {
+      font-size: 12.5px; font-weight: 500; letter-spacing: 0.01em;
+      color: var(--text); min-width: 64px; text-align: center;
+      cursor: pointer; transition: color var(--t);
+    }
+    .pill-btn {
+      background: none; border: 1px solid var(--border);
+      padding: 3px 9px; font-size: 11px; font-weight: 500;
+      letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3);
+      border-radius: 2px; margin-left: 5px; transition: all 0.14s;
+    }
+    .pill-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .topbar-mid {
+      display: flex; align-items: center; gap: 10px; padding: 0 14px;
+    }
+    .cta-btn {
+      background: var(--text); color: var(--bg); border: none;
+      padding: 6px 13px; font-size: 12px; font-weight: 500;
+      letter-spacing: 0.04em; border-radius: 3px; white-space: nowrap;
+      transition: opacity 0.14s;
+    }
+    .cta-btn:hover { opacity: 0.75; }
+    .stats-row { display: flex; align-items: center; gap: 10px; }
+    .stat {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 12px; color: var(--text-3); transition: color var(--t);
+    }
+    .stat b { color: var(--text); font-weight: 600; transition: color var(--t); }
+    .topbar-nav {
+      display: flex; align-items: stretch; height: 60px; margin-left: auto;
+    }
+    .nav-tab {
+      display: flex; align-items: center; gap: 5px; padding: 0 10px;
+      font-size: 11px; font-weight: 500; letter-spacing: 0.065em; text-transform: uppercase;
+      color: var(--text-3); border: none; background: none;
+      border-bottom: 2px solid transparent; white-space: nowrap;
+      transition: color 0.14s, border-color 0.14s; position: relative;
+    }
+    .nav-tab:hover { color: var(--text-2); }
+    .nav-tab.on { color: var(--text); border-bottom-color: var(--accent); }
+    .theme-btn {
+      width: 34px; height: 34px; background: none;
+      border: 1px solid var(--border); display: flex; align-items: center;
+      justify-content: center; border-radius: 3px; margin-left: 8px; align-self: center;
+      font-size: 14px; color: var(--text-2); transition: border-color 0.14s, color 0.14s;
+    }
+    .theme-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      height: 40px; flex-shrink: 0;
+      background: var(--surface); border-bottom: 1px solid var(--border-subtle);
+      display: flex; align-items: center; padding: 0 18px; gap: 4px;
+      overflow-x: auto; transition: background var(--t), border-color var(--t);
+    }
+    .filter-label {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--text-3); margin-right: 6px; flex-shrink: 0; transition: color var(--t);
+    }
+    .stylist-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 11px; background: none;
+      border: 1px solid transparent; border-radius: 20px;
+      font-size: 12px; font-weight: 500; color: var(--text-2);
+      white-space: nowrap; flex-shrink: 0; transition: all 0.14s;
+    }
+    .stylist-pill:hover { border-color: var(--border); color: var(--text); }
+    .stylist-pill.on { border-color: var(--border); background: var(--surface-2); color: var(--text); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Nav tab base class alias for callbacks filter ── */
+    .filter-btn {
+      padding: 5px 12px; font-size: 11.5px; font-weight: 500; border: none;
+      border-radius: 6px; background: #f1f5f9; color: #64748b;
+      cursor: pointer; transition: all 0.14s;
+    }
+    .filter-btn:hover { background: #e2e8f0; }
+    .filter-btn.on { background: var(--text); color: var(--bg); }
+
+    /* ── Settings tab ── */
+    .stg-tab {
+      padding: 6px 16px; border-radius: 8px; font-size: 13.5px; font-weight: 500;
+      border: none; background: none; color: #64748b; cursor: pointer; transition: all 0.14s;
+    }
+    .stg-tab.on { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.10); color: #0f172a; }
+
+    /* ── Dark mode overrides for Tailwind content areas ── */
+    [data-theme="dark"] body { background: var(--bg); color: var(--text); }
+    [data-theme="dark"] .kpi-card,
+    [data-theme="dark"] .cb-card,
+    [data-theme="dark"] .session-card,
+    [data-theme="dark"] .settings-section,
+    [data-theme="dark"] .create-modal,
+    [data-theme="dark"] .drawer { background: var(--surface) !important; border-color: var(--border) !important; color: var(--text) !important; }
+    [data-theme="dark"] .list-row:hover { background: var(--surface-2) !important; }
+    [data-theme="dark"] .bg-slate-50,
+    [data-theme="dark"] .bg-white { background-color: var(--surface) !important; }
+    [data-theme="dark"] .text-slate-900, [data-theme="dark"] .text-slate-800 { color: var(--text) !important; }
+    [data-theme="dark"] .text-slate-700, [data-theme="dark"] .text-slate-600 { color: var(--text-2) !important; }
+    [data-theme="dark"] .text-slate-400, [data-theme="dark"] .text-slate-500 { color: var(--text-3) !important; }
+    [data-theme="dark"] .border-slate-100, [data-theme="dark"] .border-slate-200 { border-color: var(--border) !important; }
+    [data-theme="dark"] .form-input { background: var(--surface-2) !important; border-color: var(--border) !important; color: var(--text) !important; }
+    [data-theme="dark"] .form-input:focus { border-color: var(--accent) !important; }
+    [data-theme="dark"] .toast { background: var(--surface) !important; color: var(--text) !important; }
+    [data-theme="dark"] .stg-tab.on { background: var(--surface-2) !important; color: var(--text) !important; }
+    [data-theme="dark"] .filter-btn.on { background: var(--text) !important; color: var(--bg) !important; }
+    [data-theme="dark"] .filter-btn { background: var(--surface-2) !important; color: var(--text-3) !important; }
+    [data-theme="dark"] .hist-pill { background: var(--surface-2) !important; }
+    [data-theme="dark"] .hist-pill button.active { background: var(--surface) !important; color: var(--text) !important; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
     * { box-sizing: border-box; }
-    body { font-family: 'Inter', system-ui, sans-serif; }
+    body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); color: var(--text); transition: background var(--t), color var(--t); }
 
     /* ── Calendar grid ───────────────────────── */
     .cal-wrap   { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
-    .cal-header { display: grid; grid-template-columns: 56px repeat(5, 1fr);
-                  background: #fff; border-bottom: 1px solid #f1f5f9; flex-shrink: 0; }
+    .cal-head   { display: grid; grid-template-columns: 56px repeat(5, 1fr);
+                  background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0;
+                  transition: background var(--t), border-color var(--t); }
     .cal-body   { display: grid; grid-template-columns: 56px repeat(5, 1fr);
                   flex: 1; overflow-y: auto; position: relative; }
+    /* backward-compat alias */
+    .cal-header { display: grid; grid-template-columns: 56px repeat(5, 1fr);
+                  background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 
-    .cal-time-gutter { position: relative; background: #fff; }
+    .cal-time-gutter { position: relative; background: var(--surface); transition: background var(--t); }
     .cal-hour { height: 60px; position: relative; }
     .cal-hour-label {
       position: absolute; right: 8px; top: -9px;
-      font-size: 11px; font-weight: 500; color: #94a3b8;
-      white-space: nowrap;
+      font-size: 11px; font-weight: 500; color: var(--text-3);
+      white-space: nowrap; transition: color var(--t);
     }
 
-    .cal-day-col { position: relative; border-left: 1px solid #e5e7eb; }
-    .cal-day-col.today { background: #f8f9ff; }
+    /* Day header cells */
+    .cal-head-gutter { /* spacer */ }
+    .cal-head-day {
+      padding: 9px 10px 8px; text-align: center;
+      border-left: 1px solid var(--border-subtle);
+      transition: border-color var(--t);
+    }
+    .d-abbr {
+      display: block; font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-3); margin-bottom: 4px;
+      transition: color var(--t);
+    }
+    .d-num {
+      display: inline-flex; width: 30px; height: 30px; align-items: center;
+      justify-content: center; border-radius: 50%;
+      font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 400;
+      color: var(--text-2); transition: background var(--t), color var(--t);
+    }
+    .cal-head-day.today .d-abbr { color: var(--accent); }
+    .cal-head-day.today .d-num { background: var(--today-bg); color: var(--today-text); }
+
+    .cal-day-col { position: relative; border-left: 1px solid var(--border-subtle); transition: border-color var(--t); }
+    .cal-day-col.today { background: rgba(155,107,44,0.035); }
     /* Full-hour line (solid) + half-hour line (dashed, lighter) */
     .cal-day-cell {
       height: 60px;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid var(--hour-line);
       background-image: linear-gradient(
         to bottom,
         transparent 50%,
-        #f3f4f6 50%,
-        #f3f4f6 calc(50% + 1px),
+        var(--half-line) 50%,
+        var(--half-line) calc(50% + 1px),
         transparent calc(50% + 1px)
       );
     }
     /* Gutter hour lines (sync with day cells) */
     .cal-hour::after {
       content: ''; position: absolute; bottom: 0; left: 0; right: 0;
-      height: 1px; background: #e5e7eb;
+      height: 1px; background: var(--hour-line);
     }
     .cal-hour::before {
       content: ''; position: absolute;
       top: 50%; left: 0; right: 0;
-      height: 1px; background: #f3f4f6;
+      height: 1px; background: var(--half-line);
     }
 
     /* ── Appointment cards ───────────────────── */
     .appt {
-      position: absolute; left: 3px; right: 3px;
-      border-radius: 7px; padding: 5px 8px;
+      position: absolute;
+      border-radius: 3px; padding: 5px 7px 5px 11px;
       overflow: hidden; cursor: pointer;
-      transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
-      font-size: 11.5px; line-height: 1.35;
-      min-height: 26px; color: #fff;
-      box-shadow: 0 1px 4px rgba(0,0,0,.18);
+      transition: transform .12s ease, box-shadow .12s ease;
+      font-size: 11.5px; line-height: 1.35; min-height: 26px;
+      color: var(--text); animation: fadeUp 0.35s ease backwards;
     }
-    .appt:hover { transform: translateY(-1px) scale(1.01);
-                  box-shadow: 0 5px 18px rgba(0,0,0,.28); z-index: 10; filter: brightness(1.08); }
-    .appt-name    { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .appt-service { opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
-    .appt-meta    { opacity: .7; font-size: 10.5px; margin-top: 1px; }
+    .appt:hover { transform: scale(1.015) translateX(1px); z-index: 10;
+                  box-shadow: 0 4px 16px var(--shadow-card); }
+    .appt-border {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+      border-radius: 3px 0 0 3px;
+    }
+    .appt-name    { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
+    .appt-svc     { opacity: .70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; margin-top: 1px; position: relative; }
+    .appt-time    { opacity: .52; font-size: 9.5px; margin-top: 2px; letter-spacing: .02em; position: relative; }
+    /* backward compat aliases */
+    .appt-service { opacity: .70; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; position: relative; }
+    .appt-meta    { opacity: .52; font-size: 10.5px; margin-top: 1px; position: relative; }
 
     /* ── Current time line ───────────────────── */
     .now-line {
-      position: absolute; left: 0; right: 0; height: 2px;
-      background: #ef4444; z-index: 20; pointer-events: none;
+      position: absolute; left: -1px; right: 0; height: 1.5px;
+      background: var(--accent); z-index: 20; pointer-events: none;
+      transition: background var(--t);
     }
     .now-line::before {
-      content:''; position: absolute; left: -5px; top: -4px;
-      width: 10px; height: 10px; border-radius: 50%;
-      background: #ef4444;
+      content:''; position: absolute; left: -2px; top: -2.75px;
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent);
     }
 
     /* ── Side panel ──────────────────────────── */
     .drawer {
       position: fixed; top: 0; right: 0; bottom: 0; width: 380px;
-      background: #fff; z-index: 50;
-      box-shadow: -24px 0 64px rgba(0,0,0,.12);
+      background: var(--surface); z-index: 50;
+      box-shadow: -24px 0 64px var(--shadow-card);
       transform: translateX(100%);
-      transition: transform .28s cubic-bezier(.4,0,.2,1);
+      transition: transform .28s cubic-bezier(.4,0,.2,1), background var(--t);
       display: flex; flex-direction: column;
     }
     .drawer.open  { transform: translateX(0); }
@@ -126,11 +369,11 @@
     .toast {
       position: fixed; bottom: 28px; left: 50%; z-index: 100;
       transform: translateX(-50%) translateY(90px);
-      background: #0f172a; color: #fff;
-      padding: 11px 20px; border-radius: 12px;
-      font-size: 13.5px; font-weight: 500;
-      box-shadow: 0 8px 30px rgba(0,0,0,.25);
-      transition: transform .28s cubic-bezier(.4,0,.2,1);
+      background: var(--text); color: var(--bg);
+      padding: 11px 20px; border-radius: 4px;
+      font-size: 13px; font-weight: 500; letter-spacing: 0.02em;
+      box-shadow: 0 8px 30px var(--shadow-card);
+      transition: transform .28s cubic-bezier(.4,0,.2,1), background var(--t);
       white-space: nowrap;
     }
     .toast.up { transform: translateX(-50%) translateY(0); }
@@ -145,7 +388,7 @@
     .live-dot { animation: pulse 2s ease-in-out infinite; }
 
     /* ── Login ───────────────────────────────── */
-    .login-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .login-bg { background: linear-gradient(135deg, #2D2420 0%, #1A1612 100%); }
 
     /* ── List view ───────────────────────────── */
     .list-row {
@@ -217,7 +460,7 @@
       font-size: 14px; color: #0f172a; background: #fff;
       transition: border-color .15s; outline: none; font-family: inherit;
     }
-    .form-input:focus { border-color: #a855f7; }
+    .form-input:focus { border-color: var(--accent); }
     .slot-radio { display: none; }
     .slot-label {
       display: inline-flex; align-items: center; gap: 6px;
@@ -226,9 +469,9 @@
       color: #475569; transition: all .13s ease; background: #f8fafc;
     }
     .slot-radio:checked + .slot-label {
-      background: #f5f3ff; border-color: #a855f7; color: #7e22ce;
+      background: var(--surface-2); border-color: var(--accent); color: var(--accent);
     }
-    .slot-label:hover { border-color: #c4b5fd; background: #faf5ff; }
+    .slot-label:hover { border-color: var(--accent-2); background: var(--surface-2); }
 
     /* ── Settings view ───────────────────────── */
     .settings-section {
@@ -237,7 +480,7 @@
       box-shadow: 0 1px 4px rgba(0,0,0,.05);
     }
     .settings-section-title {
-      font-size: 13px; font-weight: 700; color: #7c3aed;
+      font-size: 13px; font-weight: 700; color: var(--accent);
       text-transform: uppercase; letter-spacing: .06em; margin-bottom: 16px;
     }
     .settings-row {
@@ -276,17 +519,17 @@
       border-radius: 50%; transition: transform .2s ease;
       box-shadow: 0 1px 3px rgba(0,0,0,.15);
     }
-    .toggle input:checked + .toggle-slider { background: #a855f7; }
+    .toggle input:checked + .toggle-slider { background: var(--accent); }
     .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
     .toggle-label { font-size: 13.5px; font-weight: 500; color: #374151; }
     .save-section-btn {
       margin-top: 16px; width: 100%;
       padding: 9px; border-radius: 10px; font-size: 13.5px; font-weight: 600;
-      background: #7c3aed; color: #fff; border: none; cursor: pointer;
-      transition: background .15s;
+      background: var(--accent); color: var(--today-text); border: none; cursor: pointer;
+      transition: opacity .15s;
     }
-    .save-section-btn:hover { background: #6d28d9; }
-    .save-section-btn:disabled { background: #c4b5fd; cursor: not-allowed; }
+    .save-section-btn:hover { opacity: 0.82; }
+    .save-section-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
     /* ── Sessions view ── */
     .session-card {
@@ -314,7 +557,7 @@
   </style>
 </head>
 
-<body class="h-full bg-slate-50 text-slate-900 antialiased">
+<body class="h-full antialiased">
 
 <!-- ═══════════════════════════════════════════════════
      LOGIN
@@ -357,132 +600,92 @@
 <div id="app" class="hidden flex-col h-screen">
 
   <!-- ── Header ─────────────────────────────── -->
-  <header class="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 flex-shrink-0 z-30">
+  <header class="topbar">
 
     <!-- Logo -->
-    <div class="flex items-center gap-2.5 flex-shrink-0">
-      <div class="w-9 h-9 bg-brand-600 rounded-xl flex items-center justify-center
-                  text-white text-xs font-bold tracking-tight shadow-sm">ME</div>
-      <span class="font-semibold text-slate-800 hidden sm:block text-[15px]" data-salon-name></span>
+    <div class="logo">
+      <div class="logo-badge"><span>M</span></div>
+      <span class="logo-name" data-salon-name>Maison Éclat</span>
     </div>
-
-    <!-- Separator -->
-    <div class="w-px h-6 bg-slate-100 hidden sm:block"></div>
 
     <!-- Week nav -->
-    <div class="flex items-center gap-0.5">
-      <button onclick="changeWeek(-1)"
-              class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center
-                     justify-center text-slate-500 transition"
-              title="Semaine précédente">
-        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+    <div class="week-nav">
+      <button class="icon-btn" onclick="changeWeek(-1)" title="Semaine précédente">
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <button onclick="goToToday()"
-              class="px-3 h-8 text-sm font-medium text-slate-700
-                     hover:bg-slate-100 rounded-lg transition"
-              id="weekLabel">17–21 mar</button>
-      <button onclick="changeWeek(1)"
-              class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center
-                     justify-center text-slate-500 transition"
-              title="Semaine suivante">
-        <i data-lucide="chevron-right" class="w-4 h-4"></i>
+      <span id="weekLabel" class="week-range" onclick="goToToday()">17–21 mar</span>
+      <button class="icon-btn" onclick="changeWeek(1)" title="Semaine suivante">
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg>
       </button>
+      <button class="pill-btn" onclick="goToToday()">Aujourd'hui</button>
     </div>
 
-    <button onclick="goToToday()"
-            class="px-3 h-8 bg-brand-50 hover:bg-brand-100 text-brand-700
-                   text-sm font-medium rounded-lg transition hidden md:block">
-      Aujourd'hui
-    </button>
-
-    <!-- Spacer -->
-    <div class="flex-1"></div>
-
-    <!-- New booking button -->
-    <button onclick="openCreateModal()"
-            class="flex items-center gap-1.5 px-3 h-8 bg-brand-600 hover:bg-brand-700
-                   text-white text-xs font-semibold rounded-lg transition flex-shrink-0">
-      <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-      <span class="hidden sm:block">Nouveau RDV</span>
-    </button>
-
-    <!-- History toggle -->
-    <div class="hist-pill hidden md:inline-flex" id="histToggle">
-      <button id="histBtnUpcoming" class="active" onclick="setHistoryMode(false)">À venir</button>
-      <button id="histBtnPast"                    onclick="setHistoryMode(true)">Historique</button>
+    <!-- Center block -->
+    <div class="topbar-mid">
+      <button class="cta-btn" onclick="openCreateModal()">+ Nouveau RDV</button>
+      <div class="hist-pill" id="histToggle">
+        <button id="histBtnUpcoming" class="active" onclick="setHistoryMode(false)">À venir</button>
+        <button id="histBtnPast" onclick="setHistoryMode(true)">Historique</button>
+      </div>
+      <div class="stats-row hidden md:flex">
+        <div class="stat">
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <b id="statCount">—</b> RDV
+        </div>
+        <div class="stat">
+          <div class="live-dot" style="width:6px;height:6px;background:#4ade80;border-radius:50%;flex-shrink:0"></div>
+          <span id="refreshCountdown">60</span>s
+        </div>
+      </div>
     </div>
 
-    <!-- RDV count -->
-    <div class="hidden md:flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
-      <i data-lucide="calendar" class="w-3.5 h-3.5 text-slate-400"></i>
-      <span id="statCount" class="text-sm font-semibold text-slate-700">—</span>
-      <span class="text-sm text-slate-400">RDV</span>
-    </div>
-
-    <!-- Live indicator + countdown -->
-    <div class="flex items-center gap-1.5 text-xs text-slate-400 flex-shrink-0">
-      <div class="w-2 h-2 bg-emerald-400 rounded-full live-dot"></div>
-      <span class="hidden sm:block">
-        <span id="refreshCountdown">60</span>s
-      </span>
-    </div>
-
-    <!-- View toggle -->
-    <div class="flex items-center bg-slate-100 rounded-lg p-0.5 flex-shrink-0">
-      <button onclick="setView('calendar')" id="btnCal"
-              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
-                     transition flex items-center gap-1.5 text-xs font-medium">
+    <!-- Navigation tabs -->
+    <nav class="topbar-nav">
+      <button class="nav-tab on" id="btnCal" onclick="setView('calendar')">
         <i data-lucide="calendar-days" class="w-3.5 h-3.5"></i>
-        <span class="hidden sm:block">Calendrier</span>
+        <span class="hidden sm:inline">Calendrier</span>
       </button>
-      <button onclick="setView('list')" id="btnList"
-              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
-                     transition flex items-center gap-1.5 text-xs font-medium">
+      <button class="nav-tab" id="btnList" onclick="setView('list')">
         <i data-lucide="list" class="w-3.5 h-3.5"></i>
-        <span class="hidden sm:block">Liste</span>
+        <span class="hidden sm:inline">Liste</span>
       </button>
-      <button onclick="setView('callbacks')" id="btnCallbacks"
-              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
-                     transition flex items-center gap-1.5 text-xs font-medium relative">
+      <button class="nav-tab" id="btnCallbacks" onclick="setView('callbacks')" style="position:relative">
         <i data-lucide="voicemail" class="w-3.5 h-3.5"></i>
-        <span class="hidden sm:block">Rappels</span>
+        <span class="hidden sm:inline">Rappels</span>
         <span id="cbBadge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-orange-500
                                    text-white text-[9px] font-bold rounded-full
                                    flex items-center justify-center"></span>
       </button>
-      <button onclick="setView('stats')" id="btnStats"
-              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
-                     transition flex items-center gap-1.5 text-xs font-medium">
+      <button class="nav-tab" id="btnStats" onclick="setView('stats')">
         <i data-lucide="bar-chart-2" class="w-3.5 h-3.5"></i>
-        <span class="hidden sm:block">Stats</span>
+        <span class="hidden sm:inline">Stats</span>
       </button>
-      <button onclick="setView('sessions')" id="btnSessions"
-              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
-                     transition flex items-center gap-1.5 text-xs font-medium">
+      <button class="nav-tab" id="btnSessions" onclick="setView('sessions')">
         <i data-lucide="phone-call" class="w-3.5 h-3.5"></i>
-        <span class="hidden sm:block">Appels</span>
+        <span class="hidden sm:inline">Appels</span>
       </button>
-      <button onclick="setView('settings')" id="btnSettings"
-              class="px-2.5 py-1.5 rounded-md text-slate-500 hover:text-slate-700
-                     transition flex items-center gap-1.5 text-xs font-medium">
+      <button class="nav-tab" id="btnSettings" onclick="setView('settings')">
         <i data-lucide="settings" class="w-3.5 h-3.5"></i>
-        <span class="hidden sm:block">Paramètres</span>
+        <span class="hidden sm:inline">Params</span>
       </button>
-    </div>
+    </nav>
+
+    <!-- Dark mode toggle -->
+    <button class="theme-btn" id="themeToggle" onclick="toggleDarkMode()" title="Basculer le thème">
+      <span id="themeIcon">☽</span>
+    </button>
+
   </header>
 
   <!-- ── Employee filter bar ─────────────────── -->
-  <div id="empBar"
-       class="bg-white border-b border-slate-100 px-4 py-2
-              flex items-center gap-2 overflow-x-auto flex-shrink-0">
-    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider
-                 flex-shrink-0 mr-1">Coiffeurs</span>
+  <div id="empBar" class="filter-bar">
+    <span class="filter-label">Coiffeurs</span>
   </div>
 
   <!-- ── Calendar view ──────────────────────── -->
   <div id="calView" class="flex-1 overflow-hidden cal-wrap">
-    <div class="cal-header" id="calHeader">
-      <div></div>
+    <div class="cal-head" id="calHeader">
+      <div class="cal-head-gutter"></div>
     </div>
     <div class="cal-body scroll" id="calBody">
       <div class="cal-time-gutter" id="calGutter"></div>
@@ -552,9 +755,9 @@
         <span class="text-sm font-semibold text-slate-700 mr-1">Demandes de rappel</span>
         <div class="flex-1"></div>
         <button onclick="setCbFilter('pending')" id="cbFilterPending"
-                class="px-3 py-1.5 text-xs font-medium rounded-lg transition">En attente</button>
+                class="filter-btn on">En attente</button>
         <button onclick="setCbFilter('all')" id="cbFilterAll"
-                class="px-3 py-1.5 text-xs font-medium rounded-lg transition">Toutes</button>
+                class="filter-btn">Toutes</button>
         <button onclick="loadCallbacks()" title="Rafraîchir"
                 class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100
                        text-slate-400 transition">
@@ -575,11 +778,11 @@
       <div class="flex items-center gap-3 mb-6">
         <div class="flex bg-slate-100 rounded-xl p-1 gap-1">
           <button id="stgTabGerant" onclick="setSettingsTab('gerant')"
-                  class="px-4 py-1.5 rounded-lg text-sm font-medium transition">
+                  class="stg-tab on">
             Gérant
           </button>
           <button id="stgTabTechnique" onclick="setSettingsTab('technique')"
-                  class="px-4 py-1.5 rounded-lg text-sm font-medium transition">
+                  class="stg-tab">
             Configuration technique
           </button>
         </div>
@@ -818,12 +1021,12 @@ const MONTHS = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','n
 const DAYS_SHORT = ['lun.','mar.','mer.','jeu.','ven.','sam.','dim.'];
 
 const PALETTE = [
-  { bg:'#7c3aed', light:'#f5f3ff', border:'#a78bfa', text:'#5b21b6' },
-  { bg:'#0891b2', light:'#ecfeff', border:'#67e8f9', text:'#0e7490' },
-  { bg:'#e11d48', light:'#fff1f2', border:'#fda4af', text:'#be123c' },
-  { bg:'#4f46e5', light:'#eef2ff', border:'#a5b4fc', text:'#3730a3' },
-  { bg:'#059669', light:'#ecfdf5', border:'#6ee7b7', text:'#047857' },
-  { bg:'#d97706', light:'#fffbeb', border:'#fcd34d', text:'#b45309' },
+  { bg:'#C06545', rgb:'192,101,69',  light:'#fdf0eb', border:'#C06545', text:'#fff' },
+  { bg:'#4A8070', rgb:'74,128,112',  light:'#eaf2f0', border:'#4A8070', text:'#fff' },
+  { bg:'#8A6AAE', rgb:'138,106,174', light:'#f2eef8', border:'#8A6AAE', text:'#fff' },
+  { bg:'#B88A50', rgb:'184,138,80',  light:'#f7f0e4', border:'#B88A50', text:'#fff' },
+  { bg:'#7B8FA1', rgb:'123,143,161', light:'#edf1f4', border:'#7B8FA1', text:'#fff' },
+  { bg:'#B85B6E', rgb:'184,91,110',  light:'#f8eef0', border:'#B85B6E', text:'#fff' },
 ];
 
 // ── State ──────────────────────────────────────────────────────────
@@ -841,6 +1044,7 @@ let nowLineTimer = null;
 
 // ── Boot ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  initDarkMode();
   lucide.createIcons();
   buildGutter();
 
@@ -967,11 +1171,11 @@ function buildEmpBar() {
   if (activeEmps.size === 0) names.forEach(n => activeEmps.add(n));
 
   const bar = document.getElementById('empBar');
-  bar.innerHTML = '<span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex-shrink-0 mr-1">Coiffeurs</span>';
+  bar.innerHTML = '<span class="filter-label">Coiffeurs</span>';
 
   const allOn = activeEmps.size === names.length;
   const allChip = document.createElement('button');
-  allChip.className = `chip${allOn ? '' : ' off'}`;
+  allChip.className = `stylist-pill${allOn ? ' on' : ''}`;
   allChip.textContent = 'Tous';
   allChip.onclick = () => { allOn ? activeEmps.clear() : names.forEach(n => activeEmps.add(n)); render(); };
   bar.appendChild(allChip);
@@ -980,8 +1184,8 @@ function buildEmpBar() {
     const c = empColor(name);
     const on = activeEmps.has(name);
     const chip = document.createElement('button');
-    chip.className = `chip${on ? '' : ' off'}`;
-    chip.innerHTML = `<span style="width:9px;height:9px;border-radius:50%;background:${c.bg};flex-shrink:0;display:inline-block"></span><span>${name.split(' ')[0]}</span>`;
+    chip.className = `stylist-pill${on ? ' on' : ''}`;
+    chip.innerHTML = `<span class="dot" style="background:${c.bg}"></span><span>${name.split(' ')[0]}</span>`;
     chip.onclick = () => { on ? activeEmps.delete(name) : activeEmps.add(name); render(); };
     bar.appendChild(chip);
   });
@@ -1011,14 +1215,12 @@ function renderCalendar() {
 
   // Day headers
   const hdr = document.getElementById('calHeader');
-  hdr.innerHTML = '<div></div>';
+  hdr.innerHTML = '<div class="cal-head-gutter"></div>';
   dates.forEach((d, i) => {
     const isToday = d.getTime() === today.getTime();
     const col = document.createElement('div');
-    col.className = 'text-center py-2.5';
-    col.innerHTML = `
-      <div class="text-[11px] font-semibold uppercase tracking-wide ${isToday ? 'text-brand-600' : 'text-slate-400'}">${DAYS_SHORT[i+1]}</div>
-      <div class="w-9 h-9 mx-auto mt-1 flex items-center justify-center rounded-full text-[17px] font-semibold ${isToday ? 'bg-brand-600 text-white' : 'text-slate-700'}">${d.getDate()}</div>`;
+    col.className = `cal-head-day${isToday ? ' today' : ''}`;
+    col.innerHTML = `<span class="d-abbr">${DAYS_SHORT[i+1]}</span><span class="d-num">${d.getDate()}</span>`;
     hdr.appendChild(col);
   });
 
@@ -1098,13 +1300,17 @@ function buildCard(b, colIdx, numCols) {
   const timeStr   = `${start.getHours()}h${String(start.getMinutes()).padStart(2,'0')}`;
   const firstName = (b.client_name || '—').split(' ')[0];
   const empFirst  = (b.employee_name || '').split(' ')[0];
+  const alpha  = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--appt-alpha')) || 0.10;
+  const delay  = Math.random() * 0.12;
 
   const card = document.createElement('div');
   card.className = 'appt';
-  card.style.cssText = `top:${startM*PX_PER_MIN}px;height:${h}px;left:${left};width:${w};background:${c.bg};`;
-  card.innerHTML = `<div class="appt-name">${firstName}</div>
-    ${h > 36 ? `<div class="appt-service">${b.service_label || ''}</div>` : ''}
-    ${h > 52 ? `<div class="appt-meta">${timeStr} · ${empFirst}</div>` : ''}`;
+  card.style.cssText = `top:${startM*PX_PER_MIN}px;height:${h}px;left:${left};width:${w};background:rgba(${c.rgb},${alpha});animation-delay:${delay}s;`;
+  card.innerHTML = `
+    <div class="appt-border" style="background:${c.bg}"></div>
+    <div class="appt-name">${firstName}</div>
+    ${h > 36 ? `<div class="appt-svc">${b.service_label || ''}</div>` : ''}
+    ${h > 52 ? `<div class="appt-time">${timeStr} · ${empFirst}</div>` : ''}`;
   card.onclick = () => openDrawer(b);
   return card;
 }
@@ -1249,70 +1455,49 @@ function goToToday()       { weekOffset = 0;       render(); }
 
 function setView(v, silent = false) {
   view = v;
-  const calView        = document.getElementById('calView');
-  const listView       = document.getElementById('listView');
-  const callbacksView  = document.getElementById('callbacksView');
-  const statsView      = document.getElementById('statsView');
-  const settingsView   = document.getElementById('settingsView');
-  const sessionsView   = document.getElementById('sessionsView');
-  const btnCal         = document.getElementById('btnCal');
-  const btnList        = document.getElementById('btnList');
-  const btnCallbacks   = document.getElementById('btnCallbacks');
-  const btnStats       = document.getElementById('btnStats');
-  const btnSettings    = document.getElementById('btnSettings');
-  const btnSessions    = document.getElementById('btnSessions');
-  const empBar         = document.getElementById('empBar');
-  const histToggle     = document.getElementById('histToggle');
-  const on  = 'bg-white shadow-sm text-slate-700';
-  const off = 'text-slate-500 hover:text-slate-700';
+  const empBar    = document.getElementById('empBar');
+  const histToggle = document.getElementById('histToggle');
 
-  calView.classList.add('hidden');
-  listView.classList.add('hidden');
-  callbacksView.classList.add('hidden');
-  statsView.classList.add('hidden');
-  settingsView.classList.add('hidden');
-  sessionsView.classList.add('hidden');
-  btnCal.className       = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
-  btnList.className      = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
-  btnCallbacks.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium relative ${off}`;
-  btnStats.className     = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
-  btnSettings.className  = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
-  btnSessions.className  = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${off}`;
+  // Hide all content views
+  ['calView','listView','callbacksView','statsView','settingsView','sessionsView']
+    .forEach(id => document.getElementById(id).classList.add('hidden'));
+
+  // Remove active state from all nav tabs
+  ['btnCal','btnList','btnCallbacks','btnStats','btnSettings','btnSessions']
+    .forEach(id => document.getElementById(id).classList.remove('on'));
 
   if (v === 'calendar') {
-    calView.classList.remove('hidden');
-    btnCal.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    document.getElementById('calView').classList.remove('hidden');
+    document.getElementById('btnCal').classList.add('on');
     empBar.classList.remove('hidden');
     histToggle.classList.remove('hidden');
-    histToggle.classList.add('md:inline-flex');
   } else if (v === 'list') {
-    listView.classList.remove('hidden');
-    btnList.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    document.getElementById('listView').classList.remove('hidden');
+    document.getElementById('btnList').classList.add('on');
     empBar.classList.remove('hidden');
     histToggle.classList.remove('hidden');
-    histToggle.classList.add('md:inline-flex');
   } else if (v === 'stats') {
-    statsView.classList.remove('hidden');
-    btnStats.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    document.getElementById('statsView').classList.remove('hidden');
+    document.getElementById('btnStats').classList.add('on');
     empBar.classList.add('hidden');
     histToggle.classList.add('hidden');
     loadStats();
   } else if (v === 'settings') {
-    settingsView.classList.remove('hidden');
-    btnSettings.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    document.getElementById('settingsView').classList.remove('hidden');
+    document.getElementById('btnSettings').classList.add('on');
     empBar.classList.add('hidden');
     histToggle.classList.add('hidden');
     loadSettingsView();
   } else if (v === 'sessions') {
-    sessionsView.classList.remove('hidden');
-    btnSessions.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium ${on}`;
+    document.getElementById('sessionsView').classList.remove('hidden');
+    document.getElementById('btnSessions').classList.add('on');
     empBar.classList.add('hidden');
     histToggle.classList.add('hidden');
     loadSessionsView();
   } else {
     // callbacks
-    callbacksView.classList.remove('hidden');
-    btnCallbacks.className = `px-2.5 py-1.5 rounded-md transition flex items-center gap-1.5 text-xs font-medium relative ${on}`;
+    document.getElementById('callbacksView').classList.remove('hidden');
+    document.getElementById('btnCallbacks').classList.add('on');
     empBar.classList.add('hidden');
     histToggle.classList.add('hidden');
     renderCallbacks();
@@ -1336,7 +1521,7 @@ function resetCountdown() {
 function showToast(msg, type = 'success') {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.style.background = type === 'error' ? '#dc2626' : '#0f172a';
+  el.style.background = type === 'error' ? '#c0392b' : '';
   el.classList.add('up');
   setTimeout(() => el.classList.remove('up'), 3200);
 }
@@ -1384,10 +1569,8 @@ function renderCallbacks() {
   // Update filter button styles
   const fPending = document.getElementById('cbFilterPending');
   const fAll     = document.getElementById('cbFilterAll');
-  const activeClass = 'bg-slate-900 text-white';
-  const inactiveClass = 'bg-slate-100 text-slate-500 hover:bg-slate-200';
-  fPending.className = `px-3 py-1.5 text-xs font-medium rounded-lg transition ${cbFilter === 'pending' ? activeClass : inactiveClass}`;
-  fAll.className     = `px-3 py-1.5 text-xs font-medium rounded-lg transition ${cbFilter === 'all'     ? activeClass : inactiveClass}`;
+  fPending.classList.toggle('on', cbFilter === 'pending');
+  fAll.classList.toggle('on', cbFilter === 'all');
 
   const visible = cbFilter === 'pending'
     ? callbacks.filter(c => c.status === 'pending')
@@ -1766,10 +1949,8 @@ let techniqueUnlocked = false;
 
 function setSettingsTab(tab) {
   settingsTab = tab;
-  const on  = 'bg-white shadow-sm text-slate-700';
-  const off = 'text-slate-500 hover:text-slate-700';
-  document.getElementById('stgTabGerant').className    = `px-4 py-1.5 rounded-lg text-sm font-medium transition ${tab === 'gerant'    ? on : off}`;
-  document.getElementById('stgTabTechnique').className = `px-4 py-1.5 rounded-lg text-sm font-medium transition ${tab === 'technique' ? on : off}`;
+  document.getElementById('stgTabGerant').classList.toggle('on', tab === 'gerant');
+  document.getElementById('stgTabTechnique').classList.toggle('on', tab === 'technique');
   const banner = document.getElementById('stgTechBanner');
   if (tab === 'technique') {
     if (!techniqueUnlocked) {
@@ -2151,6 +2332,24 @@ async function markCallback(id, newStatus) {
   } catch {
     showToast('Erreur lors de la mise à jour', 'error');
   }
+}
+
+// ── Dark mode ──────────────────────────────────────────────────────
+function initDarkMode() {
+  const saved = localStorage.getItem('me-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+  updateThemeIcon(saved);
+}
+function toggleDarkMode() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('me-theme', next);
+  updateThemeIcon(next);
+}
+function updateThemeIcon(theme) {
+  const el = document.getElementById('themeIcon');
+  if (el) el.textContent = theme === 'dark' ? '○' : '☽';
 }
 </script>
 </body>
