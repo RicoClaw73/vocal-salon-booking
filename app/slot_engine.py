@@ -55,6 +55,7 @@ async def find_available_slots(
     service_id: str,
     target_date: date,
     preferred_employee_id: str | None = None,
+    tenant_id: int | None = None,
 ) -> dict:
     """
     Return available slots for a service on a given date.
@@ -66,7 +67,11 @@ async def find_available_slots(
       - message: human-readable status
     """
     # 1. Load service
-    service = await session.get(Service, service_id)
+    svc_query = select(Service).where(Service.id == service_id)
+    if tenant_id is not None:
+        svc_query = svc_query.where(Service.tenant_id == tenant_id)
+    svc_result = await session.execute(svc_query)
+    service = svc_result.scalars().first()
     if not service:
         return {"slots": [], "alternatives": [], "message": f"Service '{service_id}' introuvable."}
 
@@ -76,7 +81,7 @@ async def find_available_slots(
     )
 
     # 2. Find competent employees
-    employees = await _get_competent_employees(session, service_id, preferred_employee_id)
+    employees = await _get_competent_employees(session, service_id, preferred_employee_id, tenant_id)
     if not employees:
         return {
             "slots": [],
@@ -146,6 +151,7 @@ async def validate_booking_request(
     employee_id: str,
     start_time: datetime,
     exclude_booking_id: int | None = None,
+    tenant_id: int | None = None,
 ) -> tuple[bool, str, datetime | None]:
     """
     Validate a booking request against all business rules.
@@ -153,22 +159,31 @@ async def validate_booking_request(
     Returns (ok, message, end_time).
     """
     # Service exists?
-    service = await session.get(Service, service_id)
+    svc_q = select(Service).where(Service.id == service_id)
+    if tenant_id is not None:
+        svc_q = svc_q.where(Service.tenant_id == tenant_id)
+    svc_r = await session.execute(svc_q)
+    service = svc_r.scalars().first()
     if not service:
         return False, f"Service '{service_id}' introuvable.", None
 
     # Employee exists?
-    employee = await session.get(Employee, employee_id)
+    emp_q = select(Employee).where(Employee.id == employee_id)
+    if tenant_id is not None:
+        emp_q = emp_q.where(Employee.tenant_id == tenant_id)
+    emp_r = await session.execute(emp_q)
+    employee = emp_r.scalars().first()
     if not employee:
         return False, f"Employé '{employee_id}' introuvable.", None
 
     # Competency check
-    comp = await session.execute(
-        select(EmployeeCompetency).where(
-            EmployeeCompetency.employee_id == employee_id,
-            EmployeeCompetency.service_id == service_id,
-        )
-    )
+    comp_conditions = [
+        EmployeeCompetency.employee_id == employee_id,
+        EmployeeCompetency.service_id == service_id,
+    ]
+    if tenant_id is not None:
+        comp_conditions.append(EmployeeCompetency.tenant_id == tenant_id)
+    comp = await session.execute(select(EmployeeCompetency).where(*comp_conditions))
     if not comp.scalars().first():
         return False, f"{employee.prenom} n'est pas compétent(e) pour '{service.label}'.", None
 
@@ -232,12 +247,16 @@ async def _get_competent_employees(
     session: AsyncSession,
     service_id: str,
     preferred_employee_id: str | None,
+    tenant_id: int | None = None,
 ) -> list[Employee]:
     """Get employees who can perform the service, preferred first."""
+    conditions = [EmployeeCompetency.service_id == service_id]
+    if tenant_id is not None:
+        conditions.append(EmployeeCompetency.tenant_id == tenant_id)
     query = (
         select(Employee)
         .join(EmployeeCompetency)
-        .where(EmployeeCompetency.service_id == service_id)
+        .where(*conditions)
     )
     result = await session.execute(query)
     employees = list(result.scalars().all())

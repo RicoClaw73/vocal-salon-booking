@@ -24,6 +24,7 @@ from app.voice_schemas import BookingDraft, SessionStatus, VoiceIntent
 class ConversationState:
     """Mutable state for a single voice session."""
     session_id: str
+    tenant_id: int = 0
     status: SessionStatus = SessionStatus.active
     current_intent: VoiceIntent | None = None
     booking_draft: BookingDraft = field(default_factory=BookingDraft)

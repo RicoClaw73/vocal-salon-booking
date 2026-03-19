@@ -1,0 +1,88 @@
+{
+  "_notice": "Copiez ce fichier dans data/tenants/<slug>/salon.json et remplacez toutes les valeurs. Les champs préfixés _ sont des commentaires et ne sont pas lus par l'application.",
+
+  "salon": {
+    "nom": "Salon Exemple",
+    "nom_court": "Salon Exemple",
+    "_nom_court_note": "Version sans accents pour les SMS GSM-7 (ex: Maison Eclat au lieu de Maison Éclat)",
+    "adresse": "12 rue de la Paix, 75001 Paris",
+    "adresse_courte": "12 r. de la Paix, Paris 1er",
+    "_adresse_courte_note": "Version condensée pour le pied des SMS",
+    "telephone": "+33XXXXXXXXX",
+    "_telephone_note": "Numéro Twilio du salon (format E.164)",
+    "email": "contact@monsalon.fr",
+    "site_web": "",
+    "instagram": "",
+    "horaires_affichage": "Mar-Ven 9h-18h | Sam 9h-17h"
+  },
+
+  "agent_vocal": {
+    "prenom": "Marine",
+    "_prenom_note": "Prénom affiché dans le system prompt et dans les messages",
+    "role": "réceptionniste IA",
+    "greeting": "Bonjour et bienvenue chez Salon Exemple ! Je suis Marine, réceptionniste IA du salon. Je peux vous aider à prendre rendez-vous, modifier ou annuler une réservation. Comment puis-je vous aider ?",
+    "goodbye": "Merci d'avoir appelé Salon Exemple. À bientôt !",
+    "voicemail": "Je vous passe en messagerie vocale. Veuillez laisser votre message après le signal sonore. Le salon vous rappellera dès que possible."
+  },
+
+  "proprietaire": {
+    "prenom": "Sophie",
+    "telephone": "+33XXXXXXXXX",
+    "_telephone_note": "Numéro qui reçoit les alertes SMS (nouveau RDV, annulation)",
+    "email": "sophie@monsalon.fr"
+  },
+
+  "horaires_ouverture": {
+    "_note": "Jours disponibles : lundi, mardi, mercredi, jeudi, vendredi, samedi. Omettez les jours de fermeture.",
+    "mardi":    { "debut": "09:00", "fin": "18:00", "pause": { "debut": "12:30", "fin": "13:30" } },
+    "mercredi": { "debut": "09:00", "fin": "18:00", "pause": { "debut": "12:30", "fin": "13:30" } },
+    "jeudi":    { "debut": "09:00", "fin": "18:00", "pause": { "debut": "12:30", "fin": "13:30" } },
+    "vendredi": { "debut": "09:00", "fin": "18:00", "pause": { "debut": "12:30", "fin": "13:30" } },
+    "samedi":   { "debut": "09:00", "fin": "17:00" }
+  },
+
+  "faq": [
+    {
+      "question": "Acceptez-vous les cartes bancaires ?",
+      "reponse": "Oui, nous acceptons les cartes Visa et Mastercard."
+    },
+    {
+      "question": "Proposez-vous des soins sans rendez-vous ?",
+      "reponse": "Non, uniquement sur rendez-vous."
+    },
+    {
+      "question": "Avez-vous un parking à proximité ?",
+      "reponse": "Oui, un parking public se trouve à 200m du salon."
+    }
+  ],
+
+  "equipe": [
+    {
+      "prenom": "Sophie",
+      "role": "Gérante & Coiffeuse",
+      "specialites": ["Balayages", "Colorations", "Coupes femme"],
+      "bio_courte": "Spécialiste des colorations naturelles et des balayages."
+    },
+    {
+      "prenom": "Marie",
+      "role": "Coiffeuse",
+      "specialites": ["Coupes femme", "Brushings"],
+      "bio_courte": "Passionnée par les coupes structurées et les brushings."
+    }
+  ],
+
+  "services_phares": [
+    "Coupe + brushing femme",
+    "Balayage soleil",
+    "Couleur racines",
+    "Coupe homme"
+  ],
+
+  "infos_pratiques": {
+    "langues_parlees": ["Français"],
+    "accessibilite_pmr": false,
+    "animaux_acceptes": false,
+    "wifi_disponible": true,
+    "paiement_en_ligne": false
+  }
+}

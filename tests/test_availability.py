@@ -156,13 +156,16 @@ async def test_validate_booking_request_incompetent(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_validate_booking_request_conflict(db_session: AsyncSession):
+async def test_validate_booking_request_conflict(
+    db_session: AsyncSession, default_tenant,
+):
     """Overlapping booking should fail validation."""
     tuesday = _next_tuesday()
     start = datetime(tuesday.year, tuesday.month, tuesday.day, 10, 0)
 
     # Create an existing booking
     booking = Booking(
+        tenant_id=default_tenant.id,
         client_name="Test Client",
         service_id="coupe_homme",
         employee_id="emp_02",

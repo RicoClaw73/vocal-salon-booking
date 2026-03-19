@@ -46,8 +46,8 @@ class TestSessionStore:
     """Direct tests of the persistent session store functions."""
 
     @pytest.mark.asyncio
-    async def test_create_and_load_session(self, db_session: AsyncSession):
-        state = await create_session(db_session, client_name="Alice", channel="test")
+    async def test_create_and_load_session(self, db_session: AsyncSession, default_tenant):
+        state = await create_session(db_session, default_tenant.id, client_name="Alice", channel="test")
         await db_session.commit()
 
         loaded = await load_session(db_session, state.session_id)
@@ -64,8 +64,8 @@ class TestSessionStore:
         assert loaded is None
 
     @pytest.mark.asyncio
-    async def test_save_session_updates(self, db_session: AsyncSession):
-        state = await create_session(db_session, client_name="Bob")
+    async def test_save_session_updates(self, db_session: AsyncSession, default_tenant):
+        state = await create_session(db_session, default_tenant.id, client_name="Bob")
         await db_session.commit()
 
         # Mutate state
@@ -85,8 +85,8 @@ class TestSessionStore:
         assert loaded.booking_draft.service_id == "coupe_homme"
 
     @pytest.mark.asyncio
-    async def test_transcript_events_persist(self, db_session: AsyncSession):
-        state = await create_session(db_session)
+    async def test_transcript_events_persist(self, db_session: AsyncSession, default_tenant):
+        state = await create_session(db_session, default_tenant.id)
         await db_session.commit()
 
         await append_transcript_event(
@@ -120,8 +120,8 @@ class TestSessionStore:
         assert events[1]["data"] == {"booking_id": 42}
 
     @pytest.mark.asyncio
-    async def test_empty_transcript(self, db_session: AsyncSession):
-        state = await create_session(db_session)
+    async def test_empty_transcript(self, db_session: AsyncSession, default_tenant):
+        state = await create_session(db_session, default_tenant.id)
         await db_session.commit()
 
         events = await get_transcript_events(db_session, state.session_id)
@@ -223,7 +223,7 @@ class TestApiKeyAuth:
 
     @pytest.mark.asyncio
     async def test_auth_accepts_correct_key(self):
-        """When VOICE_API_KEY is set, correct header → passes."""
+        """When VOICE_API_KEY is set, tenant api_key in header → passes."""
         from app.config import settings
         from app.main import app
         from app.database import get_db
@@ -231,14 +231,16 @@ class TestApiKeyAuth:
 
         original = settings.VOICE_API_KEY
         try:
-            settings.VOICE_API_KEY = "test-secret-key-123"
+            # Enable auth enforcement (non-empty VOICE_API_KEY)
+            # The actual key checked is the tenant's api_key stored in the DB.
+            settings.VOICE_API_KEY = "auth-enabled-sentinel"
             app.dependency_overrides[get_db] = _override_get_db
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 resp = await ac.post(
                     f"{PREFIX}/sessions/start",
                     json={},
-                    headers={"X-API-Key": "test-secret-key-123"},
+                    headers={"X-API-Key": "test-api-key"},  # matches default tenant
                 )
                 assert resp.status_code == 201
         finally:

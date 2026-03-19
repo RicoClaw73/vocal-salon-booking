@@ -11,7 +11,9 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import get_tenant_from_slug
 from app.database import get_db
+from app.models import Tenant
 from app.schemas import AvailabilityOut
 from app.slot_engine import find_available_slots
 
@@ -24,6 +26,7 @@ async def search_availability(
     date_str: str = Query(..., alias="date", description="Date YYYY-MM-DD"),
     employee_id: str | None = Query(None, description="Preferred employee (optional)"),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> AvailabilityOut:
     """Search available time slots for a service on a given date."""
     # Parse and validate date
@@ -40,6 +43,7 @@ async def search_availability(
         service_id=service_id,
         target_date=target_date,
         preferred_employee_id=employee_id,
+        tenant_id=tenant.id,
     )
 
     return AvailabilityOut(

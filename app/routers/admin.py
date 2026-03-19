@@ -1,7 +1,7 @@
 """
 Admin dashboard API.
 
-GET  /api/v1/admin/bookings   — upcoming bookings (token-protected)
+GET  /api/v1/admin/bookings   — upcoming bookings (tenant-scoped, API key required)
 GET  /api/v1/admin/settings   — read runtime settings
 PATCH /api/v1/admin/settings  — update runtime settings
 """
@@ -16,9 +16,9 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.config import settings
+from app.auth import get_current_tenant
 from app.database import get_db
-from app.models import Booking, BookingStatus, CallbackRequest, CallbackRequestStatus, Employee, Service, VoiceSession
+from app.models import Booking, BookingStatus, CallbackRequest, CallbackRequestStatus, Employee, Service, Tenant, VoiceSession
 from app.routers.bookings import _booking_to_out
 from app.schemas import BookingOut
 from app.session_store import get_transcript_events
@@ -61,24 +61,19 @@ class VoiceSessionOut(BaseModel):
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def _require_token(token: str | None = Query(None)) -> None:
-    expected = settings.VOICE_API_KEY
-    if not expected:
-        return  # dev mode — no auth
-    if not token or token != expected:
-        raise HTTPException(status_code=401, detail="Token invalide.")
-
-
 @router.get("/callbacks", response_model=list[CallbackOut])
 async def list_callbacks(
-    token: str | None = Query(None),
     status: str | None = Query(None, description="Filter by status: pending|called_back|resolved"),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> list[CallbackOut]:
     """Return callback requests, newest first. Optionally filter by status."""
-    _require_token(token)
-
-    query = select(CallbackRequest).order_by(CallbackRequest.created_at.desc()).limit(100)
+    query = (
+        select(CallbackRequest)
+        .where(CallbackRequest.tenant_id == tenant.id)
+        .order_by(CallbackRequest.created_at.desc())
+        .limit(100)
+    )
     if status:
         try:
             query = query.where(CallbackRequest.status == CallbackRequestStatus(status))
@@ -94,13 +89,17 @@ async def list_callbacks(
 async def update_callback(
     callback_id: int,
     body: CallbackPatch,
-    token: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> dict:
     """Update status and/or notes on a callback request."""
-    _require_token(token)
-
-    cb = await db.get(CallbackRequest, callback_id)
+    result = await db.execute(
+        select(CallbackRequest).where(
+            CallbackRequest.id == callback_id,
+            CallbackRequest.tenant_id == tenant.id,
+        )
+    )
+    cb = result.scalars().first()
     if cb is None:
         raise HTTPException(status_code=404, detail="Callback request not found.")
 
@@ -118,13 +117,14 @@ async def update_callback(
 
 @router.get("/services")
 async def list_services(
-    token: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> list[dict]:
     """Return all services for the create-booking form."""
-    _require_token(token)
     result = await db.execute(
-        select(Service).order_by(Service.category_label, Service.label)
+        select(Service)
+        .where(Service.tenant_id == tenant.id)
+        .order_by(Service.category_label, Service.label)
     )
     svcs = result.scalars().all()
     return [
@@ -141,13 +141,14 @@ async def list_services(
 
 @router.get("/employees")
 async def list_employees(
-    token: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> list[dict]:
     """Return all employees for the create-booking form."""
-    _require_token(token)
     result = await db.execute(
-        select(Employee).order_by(Employee.prenom)
+        select(Employee)
+        .where(Employee.tenant_id == tenant.id)
+        .order_by(Employee.prenom)
     )
     emps = result.scalars().all()
     return [
@@ -158,8 +159,8 @@ async def list_employees(
 
 @router.get("/stats")
 async def get_stats(
-    token: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> dict:
     """
     Return aggregated stats for the current calendar month:
@@ -169,8 +170,6 @@ async def get_stats(
       - top_services  (top 5 by booking count)
       - by_employee   (all employees, sorted by count desc)
     """
-    _require_token(token)
-
     now = datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     month_end = (month_start + timedelta(days=32)).replace(day=1)
@@ -181,6 +180,7 @@ async def get_stats(
         .options(selectinload(Booking.service), selectinload(Booking.employee))
         .where(
             and_(
+                Booking.tenant_id == tenant.id,
                 Booking.start_time >= month_start,
                 Booking.start_time < month_end,
                 Booking.status.in_([BookingStatus.confirmed, BookingStatus.completed]),
@@ -192,16 +192,22 @@ async def get_stats(
     # Upcoming (from now, not cancelled)
     result2 = await db.execute(
         select(Booking)
-        .where(and_(Booking.start_time >= now, Booking.status != BookingStatus.cancelled))
+        .where(
+            and_(
+                Booking.tenant_id == tenant.id,
+                Booking.start_time >= now,
+                Booking.status != BookingStatus.cancelled,
+            )
+        )
     )
     upcoming_count = len(result2.scalars().all())
 
     # Pending callbacks
-    result3 = await db.execute(
-        select(Booking.id).where(Booking.id == 0)  # placeholder — count callbacks below
-    )
     cb_result = await db.execute(
-        select(CallbackRequest).where(CallbackRequest.status == CallbackRequestStatus.pending)
+        select(CallbackRequest).where(
+            CallbackRequest.tenant_id == tenant.id,
+            CallbackRequest.status == CallbackRequestStatus.pending,
+        )
     )
     pending_callbacks = len(cb_result.scalars().all())
 
@@ -244,18 +250,16 @@ async def get_stats(
 
 @router.get("/bookings", response_model=list[BookingOut])
 async def list_bookings(
-    token: str | None = Query(None),
     days: int = Query(30, ge=1, le=365),
     past: bool = Query(False, description="If true, return past bookings instead of upcoming"),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> list[BookingOut]:
     """
     Return bookings for the admin dashboard.
     - past=false (default): next `days` days, non-cancelled, oldest first.
     - past=true:            last `days` days, all statuses, newest first.
     """
-    _require_token(token)
-
     now = datetime.now()
 
     if past:
@@ -263,6 +267,7 @@ async def list_bookings(
         result = await db.execute(
             select(Booking)
             .options(selectinload(Booking.service), selectinload(Booking.employee))
+            .where(Booking.tenant_id == tenant.id)
             .where(Booking.start_time >= since)
             .where(Booking.start_time < now)
             .order_by(Booking.start_time.desc())
@@ -272,6 +277,7 @@ async def list_bookings(
         result = await db.execute(
             select(Booking)
             .options(selectinload(Booking.service), selectinload(Booking.employee))
+            .where(Booking.tenant_id == tenant.id)
             .where(Booking.start_time >= now)
             .where(Booking.start_time <= until)
             .where(Booking.status != BookingStatus.cancelled)
@@ -286,38 +292,36 @@ async def list_bookings(
 
 @router.get("/settings")
 async def get_settings(
-    token: str | None = Query(None),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> list[dict]:
     """Return all editable runtime settings with their current values (sensitive fields masked)."""
-    _require_token(token)
-    return get_settings_with_values()
+    return get_settings_with_values(tenant.id)
 
 
 @router.patch("/settings")
 async def patch_settings(
     body: dict[str, str],
-    token: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> list[dict]:
     """Update one or more runtime settings. Changes take effect immediately."""
-    _require_token(token)
     if not body:
         raise HTTPException(status_code=400, detail="Aucun paramètre fourni.")
-    await update_settings(db, body)
-    return get_settings_with_values()
+    await update_settings(db, tenant.id, body)
+    return get_settings_with_values(tenant.id)
 
 
 # ── Voice Sessions ─────────────────────────────────────────────
 
 @router.get("/sessions", response_model=list[VoiceSessionOut])
 async def list_sessions(
-    token: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> list[VoiceSessionOut]:
     """Return the 50 most recent voice call sessions, newest first."""
-    _require_token(token)
     result = await db.execute(
         select(VoiceSession)
+        .where(VoiceSession.tenant_id == tenant.id)
         .order_by(VoiceSession.last_activity.desc())
         .limit(50)
     )
@@ -328,12 +332,17 @@ async def list_sessions(
 @router.get("/sessions/{session_id}")
 async def get_session_detail(
     session_id: str,
-    token: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> dict:
     """Return a voice session with its full turn-by-turn transcript."""
-    _require_token(token)
-    session = await db.get(VoiceSession, session_id)
+    result = await db.execute(
+        select(VoiceSession).where(
+            VoiceSession.session_id == session_id,
+            VoiceSession.tenant_id == tenant.id,
+        )
+    )
+    session = result.scalars().first()
     if session is None:
         raise HTTPException(status_code=404, detail="Session introuvable.")
     transcript = await get_transcript_events(db, session_id)

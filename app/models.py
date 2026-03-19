@@ -1,31 +1,32 @@
 """
-SQLAlchemy ORM models for Maison Éclat salon.
+SQLAlchemy ORM models for vocal-salon-booking.
 
 Tables:
-  - services              Catalogue of salon offerings
-  - employees             Staff with schedules and competencies
-  - employee_competencies M2M link between employees and services
-  - bookings              Client appointments
-  - voice_sessions        Persistent voice conversation sessions (Phase 4.3)
-  - transcript_events     Per-turn transcript log for voice sessions (Phase 4.3)
-  - salon_settings        Runtime-editable key-value settings (overrides env vars)
+  - tenants               Multi-tenant registry
+  - services              Catalogue of salon offerings (per tenant)
+  - employees             Staff with schedules and competencies (per tenant)
+  - employee_competencies M2M link between employees and services (per tenant)
+  - bookings              Client appointments (per tenant)
+  - voice_sessions        Persistent voice conversation sessions (per tenant)
+  - transcript_events     Per-turn transcript log for voice sessions
+  - callback_requests     Voicemail callback requests (per tenant)
+  - salon_settings        Runtime-editable key-value settings (per tenant)
 
 Design choices
 --------------
-* IDs are VARCHAR based on the JSON seed IDs (e.g. "coupe_femme_court").
-  This keeps the data human-readable and aligned with the n8n tool payloads.
-* Booking uses an auto-increment integer PK for simplicity (clients
-  reference a booking number, not a UUID).
-* Schedules & pauses are stored as JSON columns – they are read-only
-  reference data, not queried with WHERE clauses.
-* Voice session state is stored as JSON columns for flexibility;
-  the schema mirrors the in-memory ConversationState dataclass.
+* Service and Employee IDs are VARCHAR from JSON seed data (e.g. "coupe_femme_court").
+  For non-default tenants, create_tenant.py prefixes IDs with the slug to avoid collision.
+* Booking and CallbackRequest use auto-increment integer PKs.
+* VoiceSession uses a UUID string PK.
+* SalonSetting uses a composite PK (tenant_id, key).
+* tenant_id is a mandatory FK on all data tables — queries must always filter by it.
 """
 
 from __future__ import annotations
 
 import enum
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import (
     Boolean,
@@ -33,9 +34,11 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -68,12 +71,34 @@ class EmployeeLevel(str, enum.Enum):
     apprenti = "apprenti"
 
 
+# ── Tenant ───────────────────────────────────────────────────
+
+class Tenant(Base):
+    """
+    Multi-tenant registry. Each salon is a tenant identified by its slug.
+    The api_key authenticates requests via the X-API-Key header.
+    """
+    __tablename__ = "tenants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    api_key: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    config_path: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 # ── Service ──────────────────────────────────────────────────
 
 class Service(Base):
     __tablename__ = "services"
+    __table_args__ = (
+        Index("ix_services_tenant_id", "tenant_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=False)
     category_id: Mapped[str] = mapped_column(String(40))
     category_label: Mapped[str] = mapped_column(String(80))
     label: Mapped[str] = mapped_column(String(120))
@@ -83,7 +108,7 @@ class Service(Base):
     genre: Mapped[str] = mapped_column(String(10))  # F, M, mixte
     longueur: Mapped[str] = mapped_column(String(20))  # court, mi-long, long, tout
     is_chemical: Mapped[bool] = mapped_column(Boolean, default=False)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # relationships
     competent_employees: Mapped[list["EmployeeCompetency"]] = relationship(
@@ -96,8 +121,12 @@ class Service(Base):
 
 class Employee(Base):
     __tablename__ = "employees"
+    __table_args__ = (
+        Index("ix_employees_tenant_id", "tenant_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=False)
     prenom: Mapped[str] = mapped_column(String(60))
     nom: Mapped[str] = mapped_column(String(60))
     role: Mapped[str] = mapped_column(String(120))
@@ -105,7 +134,7 @@ class Employee(Base):
     niveau: Mapped[EmployeeLevel] = mapped_column(Enum(EmployeeLevel))
     # JSON-serialised schedule: {"mardi": {"debut": "09:00", ...}, ...}
     horaires_json: Mapped[str] = mapped_column(Text)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # relationships
     competencies: Mapped[list["EmployeeCompetency"]] = relationship(
@@ -117,7 +146,13 @@ class Employee(Base):
 class EmployeeCompetency(Base):
     """Many-to-many: which employees can perform which services."""
     __tablename__ = "employee_competencies"
+    __table_args__ = (
+        Index("ix_employee_competencies_tenant_id", "tenant_id"),
+    )
 
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), primary_key=True
+    )
     employee_id: Mapped[str] = mapped_column(
         String(20), ForeignKey("employees.id"), primary_key=True
     )
@@ -133,10 +168,14 @@ class EmployeeCompetency(Base):
 
 class Booking(Base):
     __tablename__ = "bookings"
+    __table_args__ = (
+        Index("ix_bookings_tenant_id", "tenant_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=False)
     client_name: Mapped[str] = mapped_column(String(120))
-    client_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    client_phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
     employee_id: Mapped[str] = mapped_column(String(20), ForeignKey("employees.id"))
     service_id: Mapped[str] = mapped_column(String(80), ForeignKey("services.id"))
@@ -148,7 +187,7 @@ class Booking(Base):
     status: Mapped[BookingStatus] = mapped_column(
         Enum(BookingStatus), default=BookingStatus.confirmed
     )
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -161,7 +200,7 @@ class Booking(Base):
     service: Mapped["Service"] = relationship(back_populates="bookings")
 
 
-# ── Voice Session (Phase 4.3) ──────────────────────────────
+# ── Voice Session ──────────────────────────────────────────
 
 class VoiceSession(Base):
     """
@@ -172,20 +211,24 @@ class VoiceSession(Base):
     current_intent, booking_draft) are updated in-place on every turn.
     """
     __tablename__ = "voice_sessions"
+    __table_args__ = (
+        Index("ix_voice_sessions_tenant_id", "tenant_id"),
+    )
 
     session_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="active")
-    current_intent: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    current_intent: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     booking_draft_json: Mapped[str] = mapped_column(Text, default="{}")
     turns: Mapped[int] = mapped_column(Integer, default=0)
-    client_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    client_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    client_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    client_phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     channel: Mapped[str] = mapped_column(String(20), default="phone")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_activity: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     # LLM conversation history — JSON array of OpenAI messages dicts
-    messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    messages_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # relationships
     events: Mapped[list["TranscriptEvent"]] = relationship(
@@ -205,16 +248,20 @@ class CallbackRequest(Base):
     the admin dashboard so the salon can call them back.
     """
     __tablename__ = "callback_requests"
+    __table_args__ = (
+        Index("ix_callback_requests_tenant_id", "tenant_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    caller_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    recording_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    recording_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)  # seconds
-    transcription: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=False)
+    caller_phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    recording_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    recording_duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # seconds
+    transcription: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[CallbackRequestStatus] = mapped_column(
         Enum(CallbackRequestStatus), default=CallbackRequestStatus.pending
     )
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
@@ -238,14 +285,14 @@ class TranscriptEvent(Base):
 
     # User side
     user_text: Mapped[str] = mapped_column(Text, default="")
-    intent: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    intent: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Assistant side
     response_text: Mapped[str] = mapped_column(Text, default="")
-    action_taken: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    action_taken: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     is_fallback: Mapped[bool] = mapped_column(Boolean, default=False)
-    data_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -257,13 +304,16 @@ class TranscriptEvent(Base):
 
 class SalonSetting(Base):
     """
-    Key-value store for runtime-editable settings.
+    Key-value store for runtime-editable settings, scoped per tenant.
     Overrides env vars loaded at startup via settings_service.load_settings_from_db().
     """
     __tablename__ = "salon_settings"
 
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), primary_key=True
+    )
     key: Mapped[str] = mapped_column(String(80), primary_key=True)
-    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )

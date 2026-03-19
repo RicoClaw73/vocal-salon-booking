@@ -16,9 +16,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.auth import get_tenant_from_slug
 from app.database import get_db
 from app.email_sender import send_owner_booking_email
-from app.models import Booking, BookingStatus
+from app.models import Booking, BookingStatus, Tenant
 from app.schemas import BookingCancelOut, BookingCreate, BookingOut, BookingReschedule
 from app.slot_engine import validate_booking_request
 from app.sms_sender import send_owner_booking_alert, send_owner_cancel_alert
@@ -26,12 +27,17 @@ from app.sms_sender import send_owner_booking_alert, send_owner_cancel_alert
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
-async def _get_booking_with_rels(db: AsyncSession, booking_id: int) -> Booking | None:
+async def _get_booking_with_rels(
+    db: AsyncSession, booking_id: int, tenant_id: int | None = None
+) -> Booking | None:
     """Fetch a booking with service & employee eagerly loaded."""
+    conditions = [Booking.id == booking_id]
+    if tenant_id is not None:
+        conditions.append(Booking.tenant_id == tenant_id)
     result = await db.execute(
         select(Booking)
         .options(selectinload(Booking.service), selectinload(Booking.employee))
-        .where(Booking.id == booking_id)
+        .where(*conditions)
     )
     return result.scalars().first()
 
@@ -59,15 +65,18 @@ def _booking_to_out(booking: Booking) -> BookingOut:
 async def create_booking(
     payload: BookingCreate,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> BookingOut:
     """Create a new salon booking after validating against business rules."""
     ok, message, end_time = await validate_booking_request(
-        db, payload.service_id, payload.employee_id, payload.start_time
+        db, payload.service_id, payload.employee_id, payload.start_time,
+        tenant_id=tenant.id,
     )
     if not ok:
         raise HTTPException(status_code=409, detail=message)
 
     booking = Booking(
+        tenant_id=tenant.id,
         client_name=payload.client_name,
         client_phone=payload.client_phone,
         service_id=payload.service_id,
@@ -81,7 +90,7 @@ async def create_booking(
     await db.commit()
 
     # Re-fetch with eager-loaded relationships
-    loaded = await _get_booking_with_rels(db, booking.id)
+    loaded = await _get_booking_with_rels(db, booking.id, tenant_id=tenant.id)
 
     # Notify salon owner (fire-and-forget)
     svc_label = loaded.service.label if loaded.service else payload.service_id
@@ -114,9 +123,10 @@ async def create_booking(
 async def get_booking(
     booking_id: int,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> BookingOut:
     """Retrieve a booking by ID."""
-    booking = await _get_booking_with_rels(db, booking_id)
+    booking = await _get_booking_with_rels(db, booking_id, tenant_id=tenant.id)
     if not booking:
         raise HTTPException(status_code=404, detail=f"Réservation #{booking_id} introuvable.")
     return _booking_to_out(booking)
@@ -127,9 +137,10 @@ async def reschedule_booking(
     booking_id: int,
     payload: BookingReschedule,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> BookingOut:
     """Reschedule a booking to a new time (and optionally new employee)."""
-    booking = await _get_booking_with_rels(db, booking_id)
+    booking = await _get_booking_with_rels(db, booking_id, tenant_id=tenant.id)
     if not booking:
         raise HTTPException(status_code=404, detail=f"Réservation #{booking_id} introuvable.")
     if booking.status != BookingStatus.confirmed:
@@ -141,7 +152,7 @@ async def reschedule_booking(
     employee_id = payload.employee_id or booking.employee_id
     ok, message, end_time = await validate_booking_request(
         db, booking.service_id, employee_id, payload.new_start_time,
-        exclude_booking_id=booking_id,
+        exclude_booking_id=booking_id, tenant_id=tenant.id,
     )
     if not ok:
         raise HTTPException(status_code=409, detail=message)
@@ -152,7 +163,7 @@ async def reschedule_booking(
     await db.commit()
 
     # Re-fetch with eager-loaded relationships
-    loaded = await _get_booking_with_rels(db, booking_id)
+    loaded = await _get_booking_with_rels(db, booking_id, tenant_id=tenant.id)
     return _booking_to_out(loaded)
 
 
@@ -160,9 +171,13 @@ async def reschedule_booking(
 async def cancel_booking(
     booking_id: int,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> BookingCancelOut:
     """Cancel a booking."""
-    booking = await db.get(Booking, booking_id)
+    result = await db.execute(
+        select(Booking).where(Booking.id == booking_id, Booking.tenant_id == tenant.id)
+    )
+    booking = result.scalars().first()
     if not booking:
         raise HTTPException(status_code=404, detail=f"Réservation #{booking_id} introuvable.")
     if booking.status == BookingStatus.cancelled:

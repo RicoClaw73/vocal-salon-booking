@@ -31,13 +31,15 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audio_store import synthesize_to_file
+from app.auth import get_tenant_from_slug
 from app.config import settings
 from app.conversation import conversation_manager
 from app.database import async_session as db_factory
 from app.database import get_db
 from app.intent import extract_intent_async
-from app.models import CallbackRequest, CallbackRequestStatus
+from app.models import CallbackRequest, CallbackRequestStatus, Tenant
 from app.observability import StructuredLogger, metrics
+from app.settings_service import get_tenant_settings
 from app.session_store import (
     append_transcript_event,
     create_session as db_create_session,
@@ -57,21 +59,6 @@ router = APIRouter(prefix="/twilio", tags=["twilio"])
 _cached_greeting_filename: str | None = None
 
 # ── Constants ────────────────────────────────────────────────
-
-_GREETING = (
-    "Bonjour et bienvenue chez Maison Éclat, votre salon de coiffure ! "
-    "Cet appel peut être enregistré à des fins d'amélioration de notre service. "
-    "Je peux vous aider à prendre rendez-vous, modifier ou annuler une réservation. "
-    "Comment puis-je vous aider ?"
-)
-
-_GOODBYE = "Merci d'avoir appelé Maison Éclat. À bientôt !"
-
-_VOICEMAIL_INVITE = (
-    "Je vous passe en messagerie vocale. "
-    "Veuillez laisser votre message après le signal sonore. "
-    "Le salon vous rappellera dès que possible."
-)
 
 _VOICEMAIL_GOODBYE = (
     "Votre message a bien été enregistré. "
@@ -106,7 +93,7 @@ async def warm_greeting_cache(
         return
 
     fname = await synthesize_to_file(
-        text=_GREETING,
+        text=settings.GREETING_TEXT,
         audio_dir=audio_dir,
         api_key=api_key,
         session_id="greeting",
@@ -298,6 +285,7 @@ async def _process_recording_background(
 async def twilio_voice(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> Response:
     """
     Handles initial Twilio call webhook.
@@ -323,11 +311,12 @@ async def twilio_voice(
     )
 
     # Create session using CallSid as session_id (idempotent: check first)
-    state = await db_load_session(db, call_sid)
+    state = await db_load_session(db, call_sid, tenant_id=tenant.id)
     is_new_session = state is None
     if is_new_session:
         state = await db_create_session(
             db,
+            tenant.id,
             client_name=caller_name or None,
             client_phone=caller_number or None,
             channel="twilio",
@@ -339,13 +328,14 @@ async def twilio_voice(
     metrics.inc("telephony_calls_started")
     metrics.inc("sessions_started")
 
+    tenant_settings = get_tenant_settings(tenant.id)
     # First call: play greeting. Silence timeout re-entry: use short re-prompt.
     if is_new_session:
         if _cached_greeting_filename:
             audio_url: str | None = f"{_base_url(request)}/audio/{_cached_greeting_filename}"
         else:
-            audio_url = await _tts(_GREETING, request, call_sid, 0)
-        prompt = _GREETING
+            audio_url = await _tts(tenant_settings.GREETING_TEXT, request, call_sid, 0)
+        prompt = tenant_settings.GREETING_TEXT
     else:
         audio_url = await _tts(_SILENCE_PROMPT, request, call_sid, state.turns)
         prompt = _SILENCE_PROMPT
@@ -371,6 +361,7 @@ async def twilio_voice(
 async def twilio_gather(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> Response:
     """
     Handles Twilio <Gather> result.
@@ -390,7 +381,7 @@ async def twilio_gather(
         raise HTTPException(status_code=400, detail="Missing CallSid.")
 
     # Resolve session
-    state = await db_load_session(db, call_sid)
+    state = await db_load_session(db, call_sid, tenant_id=tenant.id)
     if state is None:
         state = conversation_manager.get_session(call_sid)
     if state is None:
@@ -399,7 +390,8 @@ async def twilio_gather(
         return TwiML().redirect(_voice_url(request)).response()
 
     if state.status != SessionStatus.active:
-        return TwiML().say(_GOODBYE, voice=_VOICE, language=_LANG).hangup().response()
+        tenant_settings = get_tenant_settings(tenant.id)
+        return TwiML().say(tenant_settings.GOODBYE_TEXT, voice=_VOICE, language=_LANG).hangup().response()
 
     # No speech received → prompt to repeat
     if not speech_result and not digits:
@@ -445,6 +437,7 @@ async def twilio_gather(
                 state.messages, user_text, db,
                 client_phone=state.client_phone,
                 client_name=state.client_name,
+                tenant_id=state.tenant_id,
             )
             state.messages = new_messages
             action_taken = action_taken or "llm_response"
@@ -464,7 +457,7 @@ async def twilio_gather(
             FALLBACK_CONFIDENCE_THRESHOLD,
             MAX_CONSECUTIVE_FALLBACKS,
             _FALLBACK_RESPONSES,
-            _HUMAN_TRANSFER_MSG,
+            _human_transfer_msg,
             _INTENT_HANDLERS,
             _merge_entities_to_draft,
         )
@@ -487,7 +480,7 @@ async def twilio_gather(
             state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
 
             if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
-                response_text = _HUMAN_TRANSFER_MSG
+                response_text = _human_transfer_msg()
                 action_taken = "human_transfer_offered"
             else:
                 idx = (consecutive - 1) % len(_FALLBACK_RESPONSES)
@@ -580,6 +573,7 @@ async def twilio_gather(
 async def twilio_status(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> dict:
     """
     Handles Twilio call status callbacks.
@@ -602,7 +596,7 @@ async def twilio_status(
     )
 
     if call_sid and _is_call_end(params):
-        state = await db_load_session(db, call_sid)
+        state = await db_load_session(db, call_sid, tenant_id=tenant.id)
         if state is None:
             state = conversation_manager.get_session(call_sid)
         if state is not None:
@@ -626,6 +620,7 @@ async def twilio_recording(
     request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> Response:
     """
     Handles Twilio <Record> callback.
@@ -659,7 +654,7 @@ async def twilio_recording(
     # Retrieve caller phone from the active session
     caller_phone: str | None = None
     if call_sid:
-        state = await db_load_session(db, call_sid)
+        state = await db_load_session(db, call_sid, tenant_id=tenant.id)
         if state is None:
             state = conversation_manager.get_session(call_sid)
         if state:
@@ -667,6 +662,7 @@ async def twilio_recording(
 
     # Persist callback request immediately (transcription filled in background)
     callback = CallbackRequest(
+        tenant_id=tenant.id,
         caller_phone=caller_phone,
         recording_url=recording_url or None,
         recording_duration=int(recording_duration) if recording_duration else None,
@@ -705,6 +701,7 @@ async def twilio_recording(
 async def twilio_sms(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> Response:
     """
     Handles inbound SMS from Twilio.
@@ -715,9 +712,7 @@ async def twilio_sms(
     """
     from app.routers.voice import (
         FALLBACK_CONFIDENCE_THRESHOLD,
-        MAX_CONSECUTIVE_FALLBACKS,
         _FALLBACK_RESPONSES,
-        _HUMAN_TRANSFER_MSG,
         _INTENT_HANDLERS,
         _merge_entities_to_draft,
     )
@@ -742,6 +737,7 @@ async def twilio_sms(
     # SMS: create a fresh session per message (stateless SMS)
     state = await db_create_session(
         db,
+        tenant.id,
         client_phone=from_number or None,
         channel="sms",
     )

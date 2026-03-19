@@ -69,6 +69,7 @@ def _row_to_state(row: VoiceSession) -> ConversationState:
 
     state = ConversationState(
         session_id=row.session_id,
+        tenant_id=row.tenant_id,
         status=status,
         current_intent=intent,
         booking_draft=draft,
@@ -105,11 +106,16 @@ def _state_to_row_dict(state: ConversationState) -> dict:
 async def load_session(
     db: AsyncSession,
     session_id: str,
+    tenant_id: int | None = None,
 ) -> ConversationState | None:
-    """Load a session from the database. Returns None if not found."""
-    result = await db.execute(
-        select(VoiceSession).where(VoiceSession.session_id == session_id)
-    )
+    """Load a session from the database. Returns None if not found.
+
+    Pass ``tenant_id`` to add a tenant isolation filter (recommended for production).
+    """
+    conditions = [VoiceSession.session_id == session_id]
+    if tenant_id is not None:
+        conditions.append(VoiceSession.tenant_id == tenant_id)
+    result = await db.execute(select(VoiceSession).where(*conditions))
     row = result.scalars().first()
     if row is None:
         return None
@@ -118,6 +124,7 @@ async def load_session(
 
 async def create_session(
     db: AsyncSession,
+    tenant_id: int,
     client_name: str | None = None,
     client_phone: str | None = None,
     channel: str = "phone",
@@ -132,6 +139,7 @@ async def create_session(
     now = datetime.now(timezone.utc)
     row = VoiceSession(
         session_id=session_id,
+        tenant_id=tenant_id,
         status="active",
         client_name=client_name,
         client_phone=client_phone,
@@ -147,6 +155,7 @@ async def create_session(
 
     state = ConversationState(
         session_id=session_id,
+        tenant_id=tenant_id,
         client_name=client_name,
         client_phone=client_phone,
         channel=channel,
@@ -231,6 +240,7 @@ async def get_transcript_events(
 
 async def load_or_create_session(
     db: AsyncSession,
+    tenant_id: int,
     session_id: str | None = None,
     client_name: str | None = None,
     client_phone: str | None = None,
@@ -241,8 +251,8 @@ async def load_or_create_session(
     Raises ValueError if session_id is provided but not found.
     """
     if session_id:
-        state = await load_session(db, session_id)
+        state = await load_session(db, session_id, tenant_id=tenant_id)
         if state is None:
             raise ValueError(f"Session '{session_id}' introuvable.")
         return state
-    return await create_session(db, client_name, client_phone, channel)
+    return await create_session(db, tenant_id, client_name, client_phone, channel)

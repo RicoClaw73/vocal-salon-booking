@@ -26,12 +26,14 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_api_key
+from app.auth import get_current_tenant
 from app.config import settings
 from app.conversation import conversation_manager
 from app.database import get_db
 from app.observability import StructuredLogger, metrics, new_request_id
+from app.models import Tenant
 from app.rate_limit import rate_limit_dependency
+from app.settings_service import get_tenant_settings
 from app.session_store import (
     append_transcript_event,
 )
@@ -59,19 +61,12 @@ _slog = StructuredLogger(__name__)
 router = APIRouter(
     prefix="/telephony",
     tags=["telephony"],
-    dependencies=[Depends(require_api_key), Depends(rate_limit_dependency)],
+    dependencies=[Depends(rate_limit_dependency)],
 )
 
 
 # ── Greeting / goodbye templates (reuse from voice) ─────────────
 
-_GREETING = (
-    "Bonjour et bienvenue chez Maison Éclat ! "
-    "Je peux vous aider à prendre rendez-vous, modifier ou annuler une réservation. "
-    "Comment puis-je vous aider ?"
-)
-
-_GOODBYE = "Merci d'avoir appelé Maison Éclat. À bientôt !"
 
 
 # ── Helper: resolve adapter from config ──────────────────────────
@@ -107,6 +102,7 @@ def _check_telephony_enabled() -> None:
 async def telephony_inbound(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> dict:
     """
     Primary telephony webhook endpoint.
@@ -197,7 +193,7 @@ async def telephony_inbound(
         shadow_mode=_is_shadow_mode(),
     )
 
-    result = await _handle_event(event, adapter, db, rid)
+    result = await _handle_event(event, adapter, db, rid, tenant_id=tenant.id)
 
     latency_ms = round((time.monotonic() - t0) * 1000, 2)
     metrics.record_latency("telephony_event_ms", latency_ms)
@@ -223,18 +219,19 @@ async def _handle_event(
     adapter: TelephonyAdapter,
     db: AsyncSession,
     rid: str,
+    tenant_id: int = 0,
 ) -> dict:
     """Route a canonical event to the appropriate handler."""
     if event.event_type == CallEventType.call_started:
-        return await _handle_call_started(event, adapter, db, rid)
+        return await _handle_call_started(event, adapter, db, rid, tenant_id=tenant_id)
     elif event.event_type in (
         CallEventType.utterance,
         CallEventType.dtmf,
         CallEventType.silence_timeout,
     ):
-        return await _handle_utterance(event, adapter, db, rid)
+        return await _handle_utterance(event, adapter, db, rid, tenant_id=tenant_id)
     elif event.event_type == CallEventType.call_ended:
-        return await _handle_call_ended(event, adapter, db, rid)
+        return await _handle_call_ended(event, adapter, db, rid, tenant_id=tenant_id)
     else:
         return {"status": "ignored", "event_type": event.event_type.value}
 
@@ -244,10 +241,12 @@ async def _handle_call_started(
     adapter: TelephonyAdapter,
     db: AsyncSession,
     rid: str,
+    tenant_id: int = 0,
 ) -> dict:
     """Handle call.started — create a new voice session."""
     state = await db_create_session(
         db,
+        tenant_id,
         client_name=event.caller_name,
         client_phone=event.caller_number,
         channel=event.channel,
@@ -258,9 +257,10 @@ async def _handle_call_started(
     metrics.inc("telephony_calls_started")
     metrics.inc("sessions_started")
 
+    tenant_settings = get_tenant_settings(tenant_id)
     response = OutboundResponse(
         session_id=state.session_id,
-        response_text=_GREETING,
+        response_text=tenant_settings.GREETING_TEXT,
         intent=None,
         action_taken="session_created",
         turn_number=0,
@@ -273,7 +273,7 @@ async def _handle_call_started(
         "status": "ok",
         "event_id": event.event_id,
         "session_id": state.session_id,
-        "greeting": _GREETING,
+        "greeting": tenant_settings.GREETING_TEXT,
         "dry_run": settings.TELEPHONY_DRY_RUN,
         "outbound": outbound,
     }
@@ -284,6 +284,7 @@ async def _handle_utterance(
     adapter: TelephonyAdapter,
     db: AsyncSession,
     rid: str,
+    tenant_id: int = 0,
 ) -> dict:
     """
     Handle utterance/dtmf/silence events — route through voice pipeline.
@@ -295,7 +296,7 @@ async def _handle_utterance(
     from app.intent import extract_intent_async
     from app.routers.voice import (
         _FALLBACK_RESPONSES,
-        _HUMAN_TRANSFER_MSG,
+        _human_transfer_msg,
         _INTENT_HANDLERS,
         FALLBACK_CONFIDENCE_THRESHOLD,
         MAX_CONSECUTIVE_FALLBACKS,
@@ -307,7 +308,7 @@ async def _handle_utterance(
     if not session_id:
         raise HTTPException(status_code=422, detail="session_id required for utterance events.")
 
-    state = await db_load_session(db, session_id)
+    state = await db_load_session(db, session_id, tenant_id=tenant_id or None)
     if state is None:
         state = conversation_manager.get_session(session_id)
     if state is None:
@@ -348,7 +349,7 @@ async def _handle_utterance(
         state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
 
         if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
-            response_text = _HUMAN_TRANSFER_MSG
+            response_text = _human_transfer_msg()
             action_taken = "human_transfer_offered"
         else:
             idx = (consecutive - 1) % len(_FALLBACK_RESPONSES)
@@ -448,13 +449,14 @@ async def _handle_call_ended(
     adapter: TelephonyAdapter,
     db: AsyncSession,
     rid: str,
+    tenant_id: int = 0,
 ) -> dict:
     """Handle call.ended — close the voice session."""
     session_id = event.session_id
     if not session_id:
         return {"status": "ok", "event_id": event.event_id, "message": "No session to end."}
 
-    state = await db_load_session(db, session_id)
+    state = await db_load_session(db, session_id, tenant_id=tenant_id or None)
     if state is None:
         state = conversation_manager.get_session(session_id)
     if state is None:
@@ -474,9 +476,10 @@ async def _handle_call_ended(
     metrics.inc("sessions_completed")
     metrics.inc("telephony_calls_ended")
 
+    tenant_settings = get_tenant_settings(tenant_id)
     response = OutboundResponse(
         session_id=state.session_id,
-        response_text=_GOODBYE,
+        response_text=tenant_settings.GOODBYE_TEXT,
         action_taken="session_ended",
         turn_number=state.turns,
         dry_run=settings.TELEPHONY_DRY_RUN,

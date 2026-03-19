@@ -30,13 +30,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth import require_api_key
+from app.auth import get_current_tenant
 from app.circuit_breaker import stt_circuit_breaker, tts_circuit_breaker
 from app.config import settings
 from app.conversation import ConversationState, conversation_manager
 from app.database import get_db
 from app.intent import extract_intent_async
-from app.models import Booking, BookingStatus, Employee, EmployeeCompetency, Service
+from app.models import Booking, BookingStatus, Employee, EmployeeCompetency, Service, Tenant
 from app.observability import StructuredLogger, metrics, new_request_id
 from app.providers import (
     MockSTTProvider,
@@ -51,6 +51,7 @@ from app.providers import (
     safe_transcribe,
 )
 from app.rate_limit import rate_limit_dependency
+from app.settings_service import get_tenant_settings
 from app.session_store import (
     append_transcript_event,
     get_transcript_events,
@@ -85,18 +86,10 @@ _slog = StructuredLogger(__name__)
 router = APIRouter(
     prefix="/voice",
     tags=["voice"],
-    dependencies=[Depends(require_api_key), Depends(rate_limit_dependency)],
+    dependencies=[Depends(rate_limit_dependency)],
 )
 
 # ── Greeting templates ───────────────────────────────────────
-
-_GREETING = (
-    "Bonjour et bienvenue chez Maison Éclat ! "
-    "Je peux vous aider à prendre rendez-vous, modifier ou annuler une réservation. "
-    "Comment puis-je vous aider ?"
-)
-
-_GOODBYE = "Merci d'avoir appelé Maison Éclat. À bientôt !"
 
 # ── Fallback configuration ──────────────────────────────────
 
@@ -128,11 +121,14 @@ _FALLBACK_RESPONSES: list[str] = [
 MAX_CONSECUTIVE_FALLBACKS = 3
 """After this many consecutive unknowns, offer to transfer to a human."""
 
-_HUMAN_TRANSFER_MSG = (
-    "Il semble que j'aie du mal à vous comprendre. "
-    "Souhaitez-vous être mis en relation avec un membre de notre équipe ? "
-    "Vous pouvez aussi nous rappeler directement au 01 42 60 74 28."
-)
+def _human_transfer_msg() -> str:
+    phone_info = f" au {settings.TWILIO_TRANSFER_NUMBER}" if settings.TWILIO_TRANSFER_NUMBER else ""
+    return (
+        "Il semble que j'aie du mal à vous comprendre. "
+        "Souhaitez-vous être mis en relation avec un membre de notre équipe ?"
+        f" Vous pouvez aussi nous rappeler directement{phone_info}."
+    )
+
 
 # ── Provider singletons (config-driven, mock default) ──────
 
@@ -242,6 +238,7 @@ def _collect_provider_errors(
 async def _resolve_session(
     db: AsyncSession,
     session_id: str | None,
+    tenant_id: int = 0,
     client_name: str | None = None,
     client_phone: str | None = None,
     channel: str = "phone",
@@ -254,7 +251,7 @@ async def _resolve_session(
     """
     if session_id:
         # Try DB first
-        state = await db_load_session(db, session_id)
+        state = await db_load_session(db, session_id, tenant_id=tenant_id or None)
         if state is not None:
             # Carry over volatile in-memory attributes (e.g. fallback counter)
             old = conversation_manager._sessions.get(session_id)
@@ -278,7 +275,7 @@ async def _resolve_session(
         raise HTTPException(status_code=422, detail="session_id is required.")
 
     # Create in DB and mirror to in-memory cache
-    state = await db_create_session(db, client_name, client_phone, channel)
+    state = await db_create_session(db, tenant_id, client_name, client_phone, channel)
     conversation_manager._sessions[state.session_id] = state
     return state
 
@@ -295,12 +292,14 @@ async def _persist_state(db: AsyncSession, state: ConversationState) -> None:
 async def start_session(
     payload: SessionStartRequest,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> SessionStartResponse:
     """Open a new voice conversation session."""
     rid = new_request_id()
     state = await _resolve_session(
         db,
         session_id=None,
+        tenant_id=tenant.id,
         client_name=payload.client_name,
         client_phone=payload.client_phone,
         channel=payload.channel,
@@ -314,10 +313,11 @@ async def start_session(
         session_id=state.session_id,
         channel=payload.channel,
     )
+    tenant_settings = get_tenant_settings(tenant.id)
     return SessionStartResponse(
         session_id=state.session_id,
         status=state.status,
-        greeting=_GREETING,
+        greeting=tenant_settings.GREETING_TEXT,
         created_at=state.created_at,
     )
 
@@ -326,6 +326,7 @@ async def start_session(
 async def process_message(
     payload: UserMessageRequest,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> UserMessageResponse:
     """Process a transcribed user utterance through intent detection and fulfillment."""
     import time as _time
@@ -333,7 +334,7 @@ async def process_message(
     rid = new_request_id()
     t0 = _time.monotonic()
 
-    state = await _resolve_session(db, payload.session_id)
+    state = await _resolve_session(db, payload.session_id, tenant_id=tenant.id)
     if state.status != SessionStatus.active:
         raise HTTPException(status_code=409, detail="Cette session est déjà terminée.")
 
@@ -398,10 +399,11 @@ async def process_message(
 async def end_session(
     payload: SessionEndRequest,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> SessionEndResponse:
     """Close a voice conversation session."""
     rid = new_request_id()
-    state = await _resolve_session(db, payload.session_id)
+    state = await _resolve_session(db, payload.session_id, tenant_id=tenant.id)
 
     state.status = SessionStatus.completed
     state.touch()
@@ -420,10 +422,11 @@ async def end_session(
         duration_s=round(state.duration_seconds, 2),
     )
 
+    tenant_settings = get_tenant_settings(tenant.id)
     return SessionEndResponse(
         session_id=state.session_id,
         status=SessionStatus.completed,
-        message=_GOODBYE,
+        message=tenant_settings.GOODBYE_TEXT,
         turns=state.turns,
         duration_seconds=state.duration_seconds,
     )
@@ -436,6 +439,7 @@ async def end_session(
 async def voice_turn(
     payload: VoiceTurnRequest,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> VoiceTurnResponse:
     """
     Unified voice turn endpoint — full STT → Intent → Handler → TTS loop.
@@ -452,7 +456,7 @@ async def voice_turn(
     # 1. Resolve or create session
     state: ConversationState
     if payload.session_id:
-        state = await _resolve_session(db, payload.session_id)
+        state = await _resolve_session(db, payload.session_id, tenant_id=tenant.id)
         if state.status != SessionStatus.active:
             raise HTTPException(
                 status_code=409,
@@ -463,6 +467,7 @@ async def voice_turn(
         state = await _resolve_session(
             db,
             session_id=None,
+            tenant_id=tenant.id,
             client_name=payload.client_name,
             client_phone=payload.client_phone,
             channel=payload.channel,
@@ -563,7 +568,7 @@ async def voice_turn(
         state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
 
         if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
-            response_text = _HUMAN_TRANSFER_MSG
+            response_text = _human_transfer_msg()
             action_taken = "human_transfer_offered"
         else:
             idx = (consecutive - 1) % len(_FALLBACK_RESPONSES)
@@ -799,6 +804,7 @@ async def _handle_book(
         service_id=draft.service_id,
         target_date=target_date,
         preferred_employee_id=draft.employee_id,
+        tenant_id=state.tenant_id or None,
     )
 
     if not avail["slots"]:
@@ -842,13 +848,14 @@ async def _handle_book(
     start_dt = datetime.fromisoformat(matched_slot["start"])
 
     ok, message, end_time = await validate_booking_request(
-        db, draft.service_id, employee_id, start_dt
+        db, draft.service_id, employee_id, start_dt, tenant_id=state.tenant_id or None
     )
     if not ok:
         return f"Impossible de réserver : {message}", "validation_failed", None
 
     # Create the booking
     booking = Booking(
+        tenant_id=state.tenant_id,
         client_name=draft.client_name or state.client_name or "Client vocal",
         client_phone=draft.client_phone or state.client_phone,
         service_id=draft.service_id,
@@ -887,10 +894,13 @@ async def _handle_reschedule(
         )
 
     # Load booking
+    booking_conditions = [Booking.id == booking_id]
+    if state.tenant_id:
+        booking_conditions.append(Booking.tenant_id == state.tenant_id)
     result = await db.execute(
         select(Booking)
         .options(selectinload(Booking.service), selectinload(Booking.employee))
-        .where(Booking.id == booking_id)
+        .where(*booking_conditions)
     )
     booking = result.scalars().first()
     if not booking:
@@ -960,7 +970,11 @@ async def _handle_cancel(
             None,
         )
 
-    booking = await db.get(Booking, booking_id)
+    cancel_conditions = [Booking.id == booking_id]
+    if state.tenant_id:
+        cancel_conditions.append(Booking.tenant_id == state.tenant_id)
+    cancel_result = await db.execute(select(Booking).where(*cancel_conditions))
+    booking = cancel_result.scalars().first()
     if not booking:
         return f"Réservation #{booking_id} introuvable.", "booking_not_found", None
     if booking.status == BookingStatus.cancelled:
@@ -1026,6 +1040,7 @@ async def _handle_check_availability(
         session=db,
         service_id=resolved.id,
         target_date=target_date,
+        tenant_id=state.tenant_id or None,
     )
 
     if not avail["slots"]:
@@ -1093,6 +1108,7 @@ async def _handle_unknown(
 async def get_session_transcript(
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> dict:
     """
     Fetch the current state of a voice session for demo review.
@@ -1102,7 +1118,7 @@ async def get_session_transcript(
     the database, so it survives process restarts.
     """
     # Try DB first, fall back to in-memory
-    state = await db_load_session(db, session_id)
+    state = await db_load_session(db, session_id, tenant_id=tenant.id)
     if state is None:
         state = conversation_manager.get_session(session_id)
     if state is None:

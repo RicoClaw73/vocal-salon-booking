@@ -11,8 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import get_tenant_from_slug
 from app.database import get_db
-from app.models import Service
+from app.models import Service, Tenant
 from app.schemas import ServiceListOut, ServiceOut
 
 router = APIRouter(prefix="/services", tags=["services"])
@@ -23,9 +24,14 @@ async def list_services(
     category: str | None = Query(None, description="Filter by category_id"),
     genre: str | None = Query(None, description="Filter by genre (F/M/mixte)"),
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> ServiceListOut:
     """Return the full service catalogue, optionally filtered."""
-    query = select(Service).order_by(Service.category_id, Service.label)
+    query = (
+        select(Service)
+        .where(Service.tenant_id == tenant.id)
+        .order_by(Service.category_id, Service.label)
+    )
     if category:
         query = query.where(Service.category_id == category)
     if genre:
@@ -42,9 +48,13 @@ async def list_services(
 async def get_service(
     service_id: str,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> ServiceOut:
     """Return a single service by ID."""
-    service = await db.get(Service, service_id)
+    result = await db.execute(
+        select(Service).where(Service.id == service_id, Service.tenant_id == tenant.id)
+    )
+    service = result.scalars().first()
     if not service:
         raise HTTPException(status_code=404, detail=f"Service '{service_id}' introuvable.")
     return ServiceOut.model_validate(service)

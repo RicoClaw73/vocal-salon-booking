@@ -345,6 +345,14 @@ class TestEventIdempotencyGuard:
 class TestTelephonyRouter:
     """Integration tests for the /telephony/* endpoints."""
 
+    @pytest.fixture(autouse=True)
+    def force_local_provider(self):
+        """All tests in this class use the local adapter format — no Twilio fields needed."""
+        original = settings.TELEPHONY_PROVIDER
+        settings.TELEPHONY_PROVIDER = "local"
+        yield
+        settings.TELEPHONY_PROVIDER = original
+
     async def test_inbound_disabled_returns_503(self, client: AsyncClient):
         """When TELEPHONY_ENABLED=False, /inbound returns 503."""
         original = settings.TELEPHONY_ENABLED
@@ -380,7 +388,7 @@ class TestTelephonyRouter:
             data = resp.json()
             assert data["status"] == "ok"
             assert data["session_id"]
-            assert "Maison Éclat" in data["greeting"]
+            assert data["greeting"]
             assert data["dry_run"] is False
         finally:
             settings.TELEPHONY_ENABLED = original_enabled

@@ -31,6 +31,7 @@ from app.routers import admin, availability, bookings, employees, ops, services,
 from app.routers import twilio_router
 from app.routers.twilio_router import warm_greeting_cache
 from app.seed import seed_all
+from app.tenant_service import ensure_default_tenant
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,14 +46,21 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    logger.info("Ensuring default tenant …")
+    async with async_session() as session:
+        default_tenant = await ensure_default_tenant(
+            session, default_api_key=settings.VOICE_API_KEY
+        )
+        logger.info("Default tenant: slug=%s id=%d", default_tenant.slug, default_tenant.id)
+
     logger.info("Seeding reference data …")
     async with async_session() as session:
-        summary = await seed_all(session)
+        summary = await seed_all(session, tenant_id=default_tenant.id)
         logger.info("Seed complete: %s", summary)
 
     logger.info("Loading runtime settings from DB …")
     async with async_session() as session:
-        await load_settings_from_db(session)
+        await load_settings_from_db(session, tenant_id=default_tenant.id)
 
     # Audio store: create dir + initial cleanup
     audio_dir = Path(settings.AUDIO_DIR)
@@ -135,3 +143,10 @@ async def health() -> dict:
         "active_sessions": snap["counters"].get("sessions_started", 0)
         - snap["counters"].get("sessions_completed", 0),
     }
+
+
+# ── Public info ─────────────────────────────────────────────
+@app.get("/api/v1/info", tags=["info"])
+async def salon_info() -> dict:
+    """Public — basic salon info for UI rendering (no auth required)."""
+    return {"salon_name": settings.SALON_NAME}

@@ -11,8 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import get_tenant_from_slug
 from app.database import get_db
-from app.models import Employee
+from app.models import Employee, Tenant
 from app.schemas import EmployeeSlim
 
 router = APIRouter(prefix="/employees", tags=["employees"])
@@ -21,9 +22,14 @@ router = APIRouter(prefix="/employees", tags=["employees"])
 @router.get("", response_model=list[EmployeeSlim])
 async def list_employees(
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> list[EmployeeSlim]:
     """Return all employees (slim view)."""
-    result = await db.execute(select(Employee).order_by(Employee.prenom))
+    result = await db.execute(
+        select(Employee)
+        .where(Employee.tenant_id == tenant.id)
+        .order_by(Employee.prenom)
+    )
     employees = list(result.scalars().all())
     return [EmployeeSlim.model_validate(e) for e in employees]
 
@@ -32,9 +38,15 @@ async def list_employees(
 async def get_employee(
     employee_id: str,
     db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant_from_slug),
 ) -> EmployeeSlim:
     """Return a single employee by ID."""
-    employee = await db.get(Employee, employee_id)
+    result = await db.execute(
+        select(Employee).where(
+            Employee.id == employee_id, Employee.tenant_id == tenant.id
+        )
+    )
+    employee = result.scalars().first()
     if not employee:
         raise HTTPException(status_code=404, detail=f"Employé '{employee_id}' introuvable.")
     return EmployeeSlim.model_validate(employee)

@@ -34,6 +34,26 @@ OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
 _VALID_INTENTS = {e.value for e in VoiceIntent}
 
+_EMPLOYEE_NAMES_CACHE: str | None = None
+
+
+def _employee_names() -> str:
+    """Return comma-separated employee first names, cached after first read."""
+    global _EMPLOYEE_NAMES_CACHE
+    if _EMPLOYEE_NAMES_CACHE:
+        return _EMPLOYEE_NAMES_CACHE
+    try:
+        import json
+        from pathlib import Path
+        data_dir = Path(__file__).parent.parent / "data" / "normalized"
+        with open(data_dir / "employees.json", encoding="utf-8") as f:
+            data = json.load(f)
+        names = [emp["prenom"] for emp in data.get("employees", []) if emp.get("prenom")]
+        _EMPLOYEE_NAMES_CACHE = ", ".join(names) if names else "Sophie, Karim, Léa, Hugo, Amira"
+    except Exception:
+        _EMPLOYEE_NAMES_CACHE = "Sophie, Karim, Léa, Hugo, Amira"
+    return _EMPLOYEE_NAMES_CACHE
+
 
 # ── Response schema (Pydantic validation) ──────────────────
 
@@ -47,38 +67,36 @@ class _LLMResponseSchema(BaseModel):
 
 # ── System prompt ───────────────────────────────────────────
 
-SYSTEM_PROMPT = """\
-Tu es le module NLU d'un assistant vocal pour un salon de coiffure haut de gamme \
-(Maison Éclat). À partir de la phrase du client, tu dois extraire :
-
-1. **intent** — une des valeurs suivantes exactement :
-   - "book" : le client veut prendre un rendez-vous
-   - "reschedule" : le client veut déplacer/modifier un rendez-vous existant
-   - "cancel" : le client veut annuler un rendez-vous
-   - "check_availability" : le client demande les disponibilités sans vouloir réserver
-   - "get_info" : le client pose une question sur le salon (adresse, horaires, tarifs, équipe, \
-paiement, parking, produits, politique d'annulation, WiFi, bons cadeaux, etc.)
-   - "unknown" : impossible de déterminer l'intention
-
-2. **confidence** — un nombre décimal entre 0.0 et 1.0 reflétant ta certitude.
-
-3. **entities** — un objet JSON avec les champs optionnels suivants :
-   - "service" : nom du service mentionné (coupe, couleur, balayage, brushing, etc.)
-   - "date" : date mentionnée au format YYYY-MM-DD si possible, sinon texte brut
-   - "time" : heure mentionnée au format HH:MM si possible, sinon texte brut
-   - "booking_id" : identifiant numérique d'un rendez-vous existant si mentionné
-   - "employee" : prénom du coiffeur/coiffeuse mentionné(e) (valeurs possibles : Sophie, Karim, Léa, Hugo, Amira)
-   - "info_topic" : sujet de la demande d'info (valeurs : address, hours, price, team, payment, \
-policy, parking, products, contact, faq_wifi, faq_animals, faq_loyalty, faq_gift, services)
-
-Règles :
-- Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou après.
-- N'invente pas d'entités non mentionnées dans la phrase.
-- Si le client mentionne « annuler » même avec un service, l'intent est "cancel".
-- Si le client mentionne « déplacer/changer/modifier » un rendez-vous, l'intent est "reschedule".
-- Les questions sur l'adresse, les horaires, les prix, l'équipe, le parking, le WiFi, \
-les animaux, les bons cadeaux, la fidélité, les produits utilisés → intent "get_info".
-"""
+def _build_system_prompt() -> str:
+    """Build the NLU system prompt with a dynamic employee list."""
+    return (
+        "Tu es le module NLU d'un assistant vocal pour un salon de coiffure haut de gamme. "
+        "À partir de la phrase du client, tu dois extraire :\n\n"
+        "1. **intent** — une des valeurs suivantes exactement :\n"
+        '   - "book" : le client veut prendre un rendez-vous\n'
+        '   - "reschedule" : le client veut déplacer/modifier un rendez-vous existant\n'
+        '   - "cancel" : le client veut annuler un rendez-vous\n'
+        '   - "check_availability" : le client demande les disponibilités sans vouloir réserver\n'
+        '   - "get_info" : le client pose une question sur le salon (adresse, horaires, tarifs, équipe, '
+        "paiement, parking, produits, politique d'annulation, WiFi, bons cadeaux, etc.)\n"
+        '   - "unknown" : impossible de déterminer l\'intention\n\n'
+        "2. **confidence** — un nombre décimal entre 0.0 et 1.0 reflétant ta certitude.\n\n"
+        "3. **entities** — un objet JSON avec les champs optionnels suivants :\n"
+        '   - "service" : nom du service mentionné (coupe, couleur, balayage, brushing, etc.)\n'
+        '   - "date" : date mentionnée au format YYYY-MM-DD si possible, sinon texte brut\n'
+        '   - "time" : heure mentionnée au format HH:MM si possible, sinon texte brut\n'
+        '   - "booking_id" : identifiant numérique d\'un rendez-vous existant si mentionné\n'
+        f'   - "employee" : prénom du coiffeur/coiffeuse mentionné(e) (valeurs possibles : {_employee_names()})\n'
+        '   - "info_topic" : sujet de la demande d\'info (valeurs : address, hours, price, team, payment, '
+        "policy, parking, products, contact, faq_wifi, faq_animals, faq_loyalty, faq_gift, services)\n\n"
+        "Règles :\n"
+        "- Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou après.\n"
+        "- N'invente pas d'entités non mentionnées dans la phrase.\n"
+        '- Si le client mentionne « annuler » même avec un service, l\'intent est "cancel".\n'
+        '- Si le client mentionne « déplacer/changer/modifier » un rendez-vous, l\'intent est "reschedule".\n'
+        "- Les questions sur l'adresse, les horaires, les prix, l'équipe, le parking, le WiFi, "
+        "les animaux, les bons cadeaux, la fidélité, les produits utilisés → intent \"get_info\".\n"
+    )
 
 
 # ── Structured result ───────────────────────────────────────
@@ -224,7 +242,7 @@ async def classify_intent_llm(
     payload = {
         "model": resolved_model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _build_system_prompt()},
             {"role": "user", "content": text},
         ],
         "temperature": 0.0,  # Deterministic for intent classification

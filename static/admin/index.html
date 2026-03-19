@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Maison Éclat · Dashboard</title>
+  <title>Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -329,7 +329,7 @@
             d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M10 10L4 4m6 6l-2.879-2.879M11.121 5.879A3 3 0 1 0 5.879 11.12M17.122 13.879a3 3 0 1 0-5.243 5.242"/>
         </svg>
       </div>
-      <h1 class="text-2xl font-bold text-slate-900">Maison Éclat</h1>
+      <h1 class="text-2xl font-bold text-slate-900" data-salon-name></h1>
       <p class="text-slate-400 text-sm mt-1">Tableau de bord · accès réservé</p>
     </div>
     <div class="space-y-4">
@@ -363,7 +363,7 @@
     <div class="flex items-center gap-2.5 flex-shrink-0">
       <div class="w-9 h-9 bg-brand-600 rounded-xl flex items-center justify-center
                   text-white text-xs font-bold tracking-tight shadow-sm">ME</div>
-      <span class="font-semibold text-slate-800 hidden sm:block text-[15px]">Maison Éclat</span>
+      <span class="font-semibold text-slate-800 hidden sm:block text-[15px]" data-salon-name></span>
     </div>
 
     <!-- Separator -->
@@ -843,6 +843,15 @@ let nowLineTimer = null;
 document.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
   buildGutter();
+
+  // Fetch salon name from API and update page title + labelled elements
+  fetch('/api/v1/info').then(r => r.ok ? r.json() : null).then(data => {
+    const name = data && data.salon_name;
+    if (name) {
+      document.title = name + ' · Dashboard';
+      document.querySelectorAll('[data-salon-name]').forEach(el => { el.textContent = name; });
+    }
+  }).catch(() => {});
 
   if (window.innerWidth < 700) setView('list', true);
   else setView('calendar', true);
@@ -2025,6 +2034,14 @@ function renderSettingsView() {
             <label class="form-label" for="stg_${item.key}">${item.label}</label>
             <input type="number" id="stg_${item.key}" class="form-input"
                    value="${item.value}" min="0" />
+            ${item.description ? `<span class="settings-hint">${item.description}</span>` : ''}
+          </div>`;
+      } else if (item.multiline) {
+        fieldsHtml += `
+          <div class="settings-row">
+            <label class="form-label" for="stg_${item.key}">${item.label}</label>
+            <textarea id="stg_${item.key}" class="form-input" rows="4"
+                      style="resize:vertical;line-height:1.5">${item.value || ''}</textarea>
             ${item.description ? `<span class="settings-hint">${item.description}</span>` : ''}
           </div>`;
       } else {
