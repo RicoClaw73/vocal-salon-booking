@@ -540,10 +540,35 @@
   <!-- ── Settings view ──────────────────────── -->
   <div id="settingsView" class="hidden flex-1 overflow-y-auto scroll">
     <div class="max-w-2xl mx-auto px-4 py-6 pb-24">
-      <div class="flex items-center justify-between mb-6">
-        <h2 class="text-base font-semibold text-slate-800">Paramètres du salon</h2>
-        <span class="text-xs text-slate-400">Les modifications s'appliquent immédiatement</span>
+
+      <!-- Tab switcher -->
+      <div class="flex items-center gap-3 mb-6">
+        <div class="flex bg-slate-100 rounded-xl p-1 gap-1">
+          <button id="stgTabGerant" onclick="setSettingsTab('gerant')"
+                  class="px-4 py-1.5 rounded-lg text-sm font-medium transition">
+            Gérant
+          </button>
+          <button id="stgTabTechnique" onclick="setSettingsTab('technique')"
+                  class="px-4 py-1.5 rounded-lg text-sm font-medium transition">
+            Configuration technique
+          </button>
+        </div>
+        <span class="text-xs text-slate-400 ml-auto hidden sm:block">
+          Les modifications s'appliquent immédiatement
+        </span>
       </div>
+
+      <!-- Technique warning banner (hidden on gérant tab) -->
+      <div id="stgTechBanner" class="hidden mb-5 flex items-start gap-3 bg-amber-50
+           border border-amber-200 rounded-xl px-4 py-3">
+        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5"></i>
+        <p class="text-xs text-amber-800 leading-relaxed">
+          <strong>Section réservée à l'intégrateur.</strong>
+          Ces paramètres techniques (clés API, tokens) sont nécessaires à la configuration
+          initiale du système. Ils ne sont pas destinés à être modifiés par le gérant.
+        </p>
+      </div>
+
       <div id="settingsSections" class="flex flex-col gap-5"></div>
     </div>
   </div>
@@ -1671,6 +1696,18 @@ function renderStats() {
 
 // ── Settings View ────────────────────────────────────────────────────
 let settingsData = [];
+let settingsTab = 'gerant';
+
+function setSettingsTab(tab) {
+  settingsTab = tab;
+  const on  = 'bg-white shadow-sm text-slate-700';
+  const off = 'text-slate-500 hover:text-slate-700';
+  document.getElementById('stgTabGerant').className    = `px-4 py-1.5 rounded-lg text-sm font-medium transition ${tab === 'gerant'    ? on : off}`;
+  document.getElementById('stgTabTechnique').className = `px-4 py-1.5 rounded-lg text-sm font-medium transition ${tab === 'technique' ? on : off}`;
+  const banner = document.getElementById('stgTechBanner');
+  tab === 'technique' ? banner.classList.remove('hidden') : banner.classList.add('hidden');
+  renderSettingsView();
+}
 
 async function loadSettingsView() {
   const p = new URLSearchParams();
@@ -1679,7 +1716,7 @@ async function loadSettingsView() {
     const r = await fetch(`/api/v1/admin/settings?${p}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     settingsData = await r.json();
-    renderSettingsView();
+    setSettingsTab('gerant'); // reset to gérant tab on load
   } catch {
     document.getElementById('settingsSections').innerHTML =
       '<p class="text-sm text-slate-400 text-center py-8">Erreur de chargement des paramètres.</p>';
@@ -1688,9 +1725,10 @@ async function loadSettingsView() {
 
 function renderSettingsView() {
   const container = document.getElementById('settingsSections');
-  // Group by section
+  // Filter by active tab, then group by section
+  const filtered = settingsData.filter(s => s.tab === settingsTab);
   const sections = {};
-  settingsData.forEach(s => {
+  filtered.forEach(s => {
     if (!sections[s.section]) sections[s.section] = [];
     sections[s.section].push(s);
   });

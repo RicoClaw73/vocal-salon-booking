@@ -23,12 +23,17 @@ from app.models import SalonSetting
 # ── Settings metadata ────────────────────────────────────────────────────────
 
 SETTINGS_METADATA: list[dict[str, Any]] = [
+    # ══════════════════════════════════════════
+    # TAB: gerant  (paramètres métier du salon)
+    # ══════════════════════════════════════════
+
     # ── Salon & Gérant ───────────────────────────────────────
     {
         "key": "OWNER_PHONE",
         "label": "Téléphone du gérant",
         "description": "Numéro qui reçoit les alertes SMS (nouveaux RDV, annulations).",
         "section": "Salon & Gérant",
+        "tab": "gerant",
         "type": "str",
         "is_sensitive": False,
     },
@@ -37,6 +42,7 @@ SETTINGS_METADATA: list[dict[str, Any]] = [
         "label": "Email du gérant",
         "description": "Adresse qui reçoit les alertes email (nouveaux RDV, demandes de rappel).",
         "section": "Salon & Gérant",
+        "tab": "gerant",
         "type": "str",
         "is_sensitive": False,
     },
@@ -45,50 +51,28 @@ SETTINGS_METADATA: list[dict[str, Any]] = [
         "label": "Adresse expéditeur email",
         "description": "Adresse affichée comme expéditeur dans les emails de notification.",
         "section": "Salon & Gérant",
+        "tab": "gerant",
         "type": "str",
         "is_sensitive": False,
     },
-    # ── Twilio SMS ───────────────────────────────────────────
-    {
-        "key": "TWILIO_ACCOUNT_SID",
-        "label": "Twilio Account SID",
-        "description": "Identifiant de compte Twilio (commence par AC…).",
-        "section": "SMS (Twilio)",
-        "type": "str",
-        "is_sensitive": True,
-    },
-    {
-        "key": "TWILIO_AUTH_TOKEN",
-        "label": "Twilio Auth Token",
-        "description": "Token d'authentification Twilio.",
-        "section": "SMS (Twilio)",
-        "type": "str",
-        "is_sensitive": True,
-    },
+    # ── Notifications SMS ────────────────────────────────────
     {
         "key": "TWILIO_PHONE_NUMBER",
         "label": "N° Twilio du salon",
-        "description": "Numéro Twilio utilisé pour envoyer les SMS (ex : +33XXXXXXXXX).",
-        "section": "SMS (Twilio)",
+        "description": "Numéro utilisé pour l'envoi des SMS (ex : +33XXXXXXXXX).",
+        "section": "Notifications SMS",
+        "tab": "gerant",
         "type": "str",
         "is_sensitive": False,
     },
     {
         "key": "TWILIO_TRANSFER_NUMBER",
         "label": "N° de renvoi d'appel",
-        "description": "Numéro humain vers lequel l'agent vocal peut transférer l'appel.",
-        "section": "SMS (Twilio)",
+        "description": "Numéro vers lequel l'agent vocal peut transférer l'appel si besoin.",
+        "section": "Notifications SMS",
+        "tab": "gerant",
         "type": "str",
         "is_sensitive": False,
-    },
-    # ── Resend Email ─────────────────────────────────────────
-    {
-        "key": "RESEND_API_KEY",
-        "label": "Clé API Resend",
-        "description": "Clé API Resend.com pour l'envoi des emails de notification.",
-        "section": "Email (Resend)",
-        "type": "str",
-        "is_sensitive": True,
     },
     # ── Rappels SMS ──────────────────────────────────────────
     {
@@ -96,6 +80,7 @@ SETTINGS_METADATA: list[dict[str, Any]] = [
         "label": "Rappels SMS J-1 activés",
         "description": "Envoie automatiquement un SMS de rappel la veille de chaque rendez-vous.",
         "section": "Rappels SMS",
+        "tab": "gerant",
         "type": "bool",
         "is_sensitive": False,
     },
@@ -104,6 +89,7 @@ SETTINGS_METADATA: list[dict[str, Any]] = [
         "label": "Heure d'envoi des rappels",
         "description": "Heure à laquelle les rappels SMS sont envoyés (0-23, heure locale).",
         "section": "Rappels SMS",
+        "tab": "gerant",
         "type": "int",
         "is_sensitive": False,
     },
@@ -113,6 +99,7 @@ SETTINGS_METADATA: list[dict[str, Any]] = [
         "label": "Rétention sessions vocales (jours)",
         "description": "Suppression automatique des sessions et transcripts plus anciens que cette durée.",
         "section": "RGPD & Rétention",
+        "tab": "gerant",
         "type": "int",
         "is_sensitive": False,
     },
@@ -121,6 +108,7 @@ SETTINGS_METADATA: list[dict[str, Any]] = [
         "label": "Rétention demandes de rappel (jours)",
         "description": "Suppression automatique des demandes de rappel résolues plus anciennes que cette durée.",
         "section": "RGPD & Rétention",
+        "tab": "gerant",
         "type": "int",
         "is_sensitive": False,
     },
@@ -129,31 +117,70 @@ SETTINGS_METADATA: list[dict[str, Any]] = [
         "label": "Heure de purge RGPD",
         "description": "Heure à laquelle la purge automatique s'exécute chaque nuit (0-23, heure locale).",
         "section": "RGPD & Rétention",
+        "tab": "gerant",
         "type": "int",
         "is_sensitive": False,
     },
-    # ── Agent Vocal ──────────────────────────────────────────
+
+    # ══════════════════════════════════════════
+    # TAB: technique  (clés API, credentials IT)
+    # ══════════════════════════════════════════
+
+    # ── Twilio (SMS & Voix) ──────────────────────────────────
+    {
+        "key": "TWILIO_ACCOUNT_SID",
+        "label": "Account SID",
+        "description": "Identifiant de compte Twilio (format : ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx).",
+        "section": "Twilio — SMS & Voix",
+        "tab": "technique",
+        "type": "str",
+        "is_sensitive": True,
+    },
+    {
+        "key": "TWILIO_AUTH_TOKEN",
+        "label": "Auth Token",
+        "description": "Token d'authentification Twilio pour la signature des webhooks.",
+        "section": "Twilio — SMS & Voix",
+        "tab": "technique",
+        "type": "str",
+        "is_sensitive": True,
+    },
+    # ── Resend (Email) ───────────────────────────────────────
+    {
+        "key": "RESEND_API_KEY",
+        "label": "Clé API",
+        "description": "Clé API Resend.com (re_xxxxxxxx…) pour l'envoi des emails de notification.",
+        "section": "Resend — Email",
+        "tab": "technique",
+        "type": "str",
+        "is_sensitive": True,
+    },
+    # ── ElevenLabs (Synthèse vocale) ─────────────────────────
     {
         "key": "ELEVENLABS_API_KEY",
-        "label": "Clé API ElevenLabs",
+        "label": "Clé API",
         "description": "Clé API ElevenLabs pour la synthèse vocale de l'agent téléphonique.",
-        "section": "Agent Vocal",
+        "section": "ElevenLabs — Synthèse vocale",
+        "tab": "technique",
         "type": "str",
         "is_sensitive": True,
     },
     {
         "key": "ELEVENLABS_VOICE_ID",
-        "label": "ID de voix ElevenLabs",
+        "label": "ID de voix",
         "description": "Identifiant de la voix ElevenLabs utilisée par l'agent (ex : lvQdCgwZfBuOzxyV5pxu).",
-        "section": "Agent Vocal",
+        "section": "ElevenLabs — Synthèse vocale",
+        "tab": "technique",
         "type": "str",
         "is_sensitive": False,
     },
+    # ── Sécurité ─────────────────────────────────────────────
     {
         "key": "VOICE_API_KEY",
-        "label": "Clé API admin (dashboard)",
-        "description": "Token requis pour accéder au dashboard admin. Laissez vide pour désactiver l'auth.",
-        "section": "Agent Vocal",
+        "label": "Token admin dashboard",
+        "description": "Clé requise pour accéder au dashboard. Laissez vide pour désactiver l'authentification.",
+        "section": "Sécurité",
+        "tab": "technique",
         "type": "str",
         "is_sensitive": True,
     },
