@@ -81,6 +81,7 @@ class TwiML:
         timeout: str = "5",
         speech_timeout: str = "auto",
         method: str = "POST",
+        num_digits: str | None = None,
     ) -> Gather:
         """
         Add a <Gather> verb and return a Gather builder.
@@ -89,8 +90,7 @@ class TwiML:
         instance continues to be updated — call methods on the TwiML object
         after gather() to add verbs that follow the <Gather>.
         """
-        return Gather(
-            self._root,
+        attrs: dict[str, str] = dict(
             input=input,
             language=language,
             timeout=timeout,
@@ -98,6 +98,9 @@ class TwiML:
             action=action,
             method=method,
         )
+        if num_digits is not None:
+            attrs["numDigits"] = num_digits
+        return Gather(self._root, **attrs)
 
     def play(self, url: str) -> "TwiML":
         """Add a <Play> verb (plays an audio file URL)."""
