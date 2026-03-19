@@ -23,6 +23,7 @@ from app.routers.bookings import _booking_to_out
 from app.schemas import BookingOut
 from app.session_store import get_transcript_events
 from app.settings_service import get_settings_with_values, update_settings
+from app.routers.twilio_router import invalidate_greeting_cache
 
 
 # ── Callback schemas ──────────────────────────────────────────
@@ -308,6 +309,9 @@ async def patch_settings(
     if not body:
         raise HTTPException(status_code=400, detail="Aucun paramètre fourni.")
     await update_settings(db, tenant.id, body)
+    # Invalidate pre-cached greeting audio if any audio text changed
+    if any(k in body for k in ("GREETING_TEXT", "GOODBYE_TEXT", "VOICEMAIL_TEXT")):
+        invalidate_greeting_cache()
     return get_settings_with_values(tenant.id)
 
 

@@ -109,6 +109,12 @@ async def warm_greeting_cache(
         logger.warning("Greeting pre-cache failed — will generate on first call")
 
 
+def invalidate_greeting_cache() -> None:
+    """Reset the pre-cached greeting filename so the next call regenerates it."""
+    global _cached_greeting_filename
+    _cached_greeting_filename = None
+
+
 def _get_adapter() -> TwilioAdapter:
     """Return a TwilioAdapter configured from settings."""
     return TwilioAdapter(

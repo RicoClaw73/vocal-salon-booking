@@ -2809,16 +2809,13 @@ async function saveSection(sectionId, keys) {
       throw new Error(err.detail || `HTTP ${r.status}`);
     }
     settingsData = await r.json();
-    // Visual success state on the button
+    // Visual success state on the button — re-render AFTER the green flash
     btn.textContent = '✓ Enregistré';
     btn.style.background = 'var(--success, #16a34a)';
     btn.style.color = '#fff';
     setTimeout(() => {
-      btn.style.background = '';
-      btn.style.color = '';
-      btn.textContent = 'Enregistrer';
-    }, 2500);
-    renderSettingsView();
+      renderSettingsView();
+    }, 2000);
   } catch (err) {
     errEl.textContent = err.message || 'Erreur lors de la sauvegarde.';
     errEl.classList.remove('hidden');
