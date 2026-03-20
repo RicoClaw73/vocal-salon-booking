@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from app.auth import get_current_tenant
 from app.database import get_db
+from app.rate_limit import rate_limit_dependency
 from app.models import Booking, BookingStatus, CallbackRequest, CallbackRequestStatus, Employee, Service, Tenant, VoiceSession
 from app.routers.bookings import _booking_to_out
 from app.schemas import BookingOut
@@ -59,7 +60,11 @@ class VoiceSessionOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(rate_limit_dependency)],
+)
 
 
 @router.get("/callbacks", response_model=list[CallbackOut])
@@ -349,7 +354,7 @@ async def get_session_detail(
     session = result.scalars().first()
     if session is None:
         raise HTTPException(status_code=404, detail="Session introuvable.")
-    transcript = await get_transcript_events(db, session_id)
+    transcript = await get_transcript_events(db, session_id, tenant_id=tenant.id)
     out = VoiceSessionOut.model_validate(session).model_dump()
     out["transcript"] = transcript
     return out

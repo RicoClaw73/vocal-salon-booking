@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -43,6 +44,12 @@ API_PREFIX = "/api/v1"
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     """Startup: create tables, seed data, init audio store. Shutdown: dispose engine."""
+    if not settings.VOICE_API_KEY and not settings.DEBUG:
+        logger.warning(
+            "SECURITY WARNING: VOICE_API_KEY is not set — all admin endpoints are unprotected. "
+            "Set VOICE_API_KEY in your environment before deploying."
+        )
+
     logger.info("Running additive migrations …")
     await run_migrations(engine)
 
@@ -103,6 +110,14 @@ app = FastAPI(
     title=settings.APP_TITLE,
     version=settings.APP_VERSION,
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["X-API-Key", "Content-Type"],
 )
 
 # ── Routers ─────────────────────────────────────────────────

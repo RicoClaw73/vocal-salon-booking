@@ -52,7 +52,10 @@ async def rate_limit_dependency(request: Request) -> None:
     if limit <= 0:
         return
 
-    client_ip = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (
+        request.client.host if request.client else "unknown"
+    )
     now = time.monotonic()
     window_start, count = _buckets[client_ip]
 

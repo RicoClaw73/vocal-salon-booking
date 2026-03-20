@@ -7,9 +7,9 @@ tool-call payloads described in docs/N8N_WORKFLOW_REDESIGN.md.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ── Service ──────────────────────────────────────────────────
 
@@ -117,10 +117,18 @@ class AvailabilityOut(BaseModel):
 class BookingCreate(BaseModel):
     client_name: str = Field(..., min_length=1, max_length=120)
     client_phone: str | None = Field(None, max_length=30)
-    service_id: str
-    employee_id: str
+    service_id: str = Field(..., min_length=1, max_length=80)
+    employee_id: str = Field(..., min_length=1, max_length=20)
     start_time: datetime = Field(..., description="ISO 8601 datetime")
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=1000)
+
+    @field_validator("start_time")
+    @classmethod
+    def start_time_not_in_past(cls, v: datetime) -> datetime:
+        now = datetime.now(timezone.utc) if v.tzinfo else datetime.now()
+        if v < now:
+            raise ValueError("start_time ne peut pas être dans le passé.")
+        return v
 
 
 class BookingOut(BaseModel):

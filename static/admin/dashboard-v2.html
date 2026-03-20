@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maison Éclat — Tableau de bord</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       DESIGN SYSTEM — MAISON ÉCLAT
+       Direction : luxe sobre parisien, ivoire/charbon, accents dorés
+    ════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg:             #F6F1E9;
+      --surface:        #FDFAF5;
+      --surface-2:      #EFE9DF;
+      --border:         #E2D9CB;
+      --border-subtle:  #EBE5D9;
+      --text:           #1A1612;
+      --text-2:         #6C5F52;
+      --text-3:         #A09386;
+      --accent:         #9B6B2C;
+      --accent-2:       #C4913A;
+      --today-bg:       #1A1612;
+      --today-text:     #F6F1E9;
+      --hour-line:      rgba(26,22,18,0.055);
+      --half-line:      rgba(26,22,18,0.028);
+      --shadow-card:    rgba(26,22,18,0.09);
+      --shadow-sm:      rgba(26,22,18,0.06);
+      --appt-alpha:     0.10;
+      --t:              0.32s ease;
+    }
+
+    [data-theme="dark"] {
+      --bg:             #0D0B09;
+      --surface:        #131110;
+      --surface-2:      #1C1916;
+      --border:         #2C2620;
+      --border-subtle:  #211D1A;
+      --text:           #EDE8DF;
+      --text-2:         #9B9389;
+      --text-3:         #5A5450;
+      --accent:         #C9A96E;
+      --accent-2:       #D4B87A;
+      --today-bg:       #C9A96E;
+      --today-text:     #0D0B09;
+      --hour-line:      rgba(255,255,255,0.038);
+      --half-line:      rgba(255,255,255,0.018);
+      --shadow-card:    rgba(0,0,0,0.4);
+      --shadow-sm:      rgba(0,0,0,0.25);
+      --appt-alpha:     0.17;
+    }
+
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    button { font-family: inherit; cursor: pointer; }
+
+    /* ── Base ── */
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.4;
+      transition: background var(--t), color var(--t);
+    }
+
+    /* Grain texture — papier de qualité */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.022;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23g)'/%3E%3C/svg%3E");
+      background-size: 400px 400px;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TOPBAR
+    ════════════════════════════════════════════════════════════════ */
+    .topbar {
+      height: 62px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 0;
+      position: relative;
+      z-index: 100;
+      transition: background var(--t), border-color var(--t);
+    }
+
+    /* Logo */
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-right: 20px;
+      border-right: 1px solid var(--border-subtle);
+      margin-right: 0;
+      flex-shrink: 0;
+      transition: border-color var(--t);
+    }
+    .logo-badge {
+      width: 30px;
+      height: 30px;
+      border: 1.5px solid var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: border-color var(--t);
+    }
+    .logo-badge span {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 16px;
+      font-weight: 500;
+      font-style: italic;
+      color: var(--accent);
+      line-height: 1;
+      transition: color var(--t);
+    }
+    .logo-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 16px;
+      font-weight: 400;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text);
+      white-space: nowrap;
+      transition: color var(--t);
+    }
+
+    /* Week navigation */
+    .week-nav {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 0 14px;
+      border-right: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+      transition: border-color var(--t);
+    }
+    .icon-btn {
+      width: 28px;
+      height: 28px;
+      background: none;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-3);
+      border-radius: 3px;
+      transition: background 0.14s, color 0.14s;
+      font-size: 14px;
+    }
+    .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+    .week-range {
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      color: var(--text);
+      min-width: 68px;
+      text-align: center;
+      transition: color var(--t);
+    }
+    .pill-btn {
+      background: none;
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      border-radius: 2px;
+      margin-left: 6px;
+      transition: all 0.14s;
+    }
+    .pill-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Center block */
+    .topbar-mid {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+    }
+    .cta-btn {
+      background: var(--text);
+      color: var(--bg);
+      border: none;
+      padding: 7px 15px;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      border-radius: 3px;
+      white-space: nowrap;
+      transition: background var(--t), color var(--t), opacity 0.14s;
+    }
+    .cta-btn:hover { opacity: 0.78; }
+    .seg-ctrl {
+      display: flex;
+      background: var(--surface-2);
+      border: 1px solid var(--border-subtle);
+      border-radius: 3px;
+      padding: 2px;
+      transition: background var(--t), border-color var(--t);
+    }
+    .seg-btn {
+      background: none;
+      border: none;
+      padding: 4px 11px;
+      font-size: 12px;
+      color: var(--text-3);
+      border-radius: 2px;
+      font-weight: 400;
+      transition: all 0.14s;
+    }
+    .seg-btn.on {
+      background: var(--surface);
+      color: var(--text);
+      font-weight: 500;
+      box-shadow: 0 1px 3px var(--shadow-sm);
+    }
+    .stats-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: var(--text-3);
+      transition: color var(--t);
+    }
+    .stat b { color: var(--text); font-weight: 600; transition: color var(--t); }
+    .stat svg { flex-shrink: 0; opacity: 0.65; }
+
+    /* Navigation tabs */
+    .topbar-nav {
+      display: flex;
+      align-items: stretch;
+      height: 62px;
+      margin-left: auto;
+    }
+    .nav-tab {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 11px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.065em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      border: none;
+      background: none;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: color 0.14s, border-color 0.14s;
+    }
+    .nav-tab:hover { color: var(--text-2); }
+    .nav-tab.on {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+    }
+    .nav-tab svg { opacity: 0.65; flex-shrink: 0; }
+
+    /* Theme toggle */
+    .theme-btn {
+      width: 36px;
+      height: 36px;
+      background: none;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      margin-left: 8px;
+      align-self: center;
+      font-size: 14px;
+      color: var(--text-2);
+      transition: border-color 0.14s, color 0.14s;
+    }
+    .theme-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FILTER BAR
+    ════════════════════════════════════════════════════════════════ */
+    .filter-bar {
+      height: 42px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 4px;
+      transition: background var(--t), border-color var(--t);
+    }
+    .filter-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-right: 6px;
+      transition: color var(--t);
+    }
+    .sep-v {
+      width: 1px;
+      height: 16px;
+      background: var(--border);
+      margin: 0 2px;
+      transition: background var(--t);
+    }
+    .stylist-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-2);
+      transition: all 0.14s;
+    }
+    .stylist-pill:hover { border-color: var(--border); color: var(--text); }
+    .stylist-pill.on { border-color: var(--border); background: var(--surface-2); color: var(--text); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CALENDAR
+    ════════════════════════════════════════════════════════════════ */
+    .cal-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Sticky day headers */
+    .cal-head {
+      flex-shrink: 0;
+      display: grid;
+      grid-template-columns: 52px repeat(5, 1fr);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      transition: background var(--t), border-color var(--t);
+    }
+    .cal-head-gutter { /* spacer */ }
+    .cal-head-day {
+      padding: 10px 12px 9px;
+      text-align: center;
+      border-left: 1px solid var(--border-subtle);
+      transition: border-color var(--t);
+      animation: fadeUp 0.4s ease backwards;
+    }
+    .d-abbr {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 5px;
+      transition: color var(--t);
+    }
+    .d-num {
+      display: inline-flex;
+      width: 32px;
+      height: 32px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 21px;
+      font-weight: 400;
+      color: var(--text-2);
+      transition: background var(--t), color var(--t);
+    }
+    .cal-head-day.today .d-abbr { color: var(--accent); }
+    .cal-head-day.today .d-num {
+      background: var(--today-bg);
+      color: var(--today-text);
+    }
+
+    /* Scrollable body */
+    .cal-scroll {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .cal-scroll::-webkit-scrollbar { width: 5px; }
+    .cal-scroll::-webkit-scrollbar-track { background: transparent; }
+    .cal-scroll::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+      transition: background var(--t);
+    }
+    .cal-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+    .cal-grid {
+      display: grid;
+      grid-template-columns: 52px repeat(5, 1fr);
+      position: relative;
+    }
+
+    /* Time gutter */
+    .time-gutter { position: relative; }
+    .time-mark {
+      height: 64px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding: 4px 10px 0 0;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      color: var(--text-3);
+      transition: color var(--t);
+    }
+
+    /* Day column */
+    .day-col {
+      position: relative;
+      border-left: 1px solid var(--border-subtle);
+      transition: border-color var(--t);
+    }
+
+    /* Grid lines */
+    .h-line {
+      position: absolute;
+      left: 0; right: 0;
+      height: 1px;
+      background: var(--hour-line);
+      pointer-events: none;
+      transition: background var(--t);
+    }
+    .h-line.half { background: var(--half-line); }
+
+    /* Current time indicator */
+    .now-line {
+      position: absolute;
+      left: -1px; right: 0;
+      height: 1.5px;
+      background: var(--accent);
+      z-index: 5;
+      pointer-events: none;
+      transition: background var(--t);
+    }
+    .now-line::before {
+      content: '';
+      position: absolute;
+      left: -2px; top: -2.75px;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       APPOINTMENT CARDS
+    ════════════════════════════════════════════════════════════════ */
+    .appt {
+      position: absolute;
+      border-radius: 3px;
+      padding: 5px 7px 5px 11px;
+      cursor: pointer;
+      overflow: hidden;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+      animation: fadeUp 0.4s ease backwards;
+    }
+    .appt-border {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      border-radius: 3px 0 0 3px;
+    }
+    .appt:hover {
+      transform: scale(1.015) translateX(1px);
+      z-index: 20;
+    }
+    .appt-name {
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      position: relative;
+    }
+    .appt-svc {
+      font-size: 10.5px;
+      font-weight: 400;
+      opacity: 0.70;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+      position: relative;
+    }
+    .appt-time {
+      font-size: 9.5px;
+      font-weight: 500;
+      opacity: 0.52;
+      margin-top: 2px;
+      letter-spacing: 0.02em;
+      position: relative;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(5px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ════ TOPBAR ════ -->
+  <header class="topbar">
+    <div class="logo">
+      <div class="logo-badge"><span>M</span></div>
+      <span class="logo-name">Maison Éclat</span>
+    </div>
+
+    <div class="week-nav">
+      <button class="icon-btn" title="Semaine précédente">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span class="week-range">17–21 mar</span>
+      <button class="icon-btn" title="Semaine suivante">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+      <button class="pill-btn">Aujourd'hui</button>
+    </div>
+
+    <div class="topbar-mid">
+      <button class="cta-btn">+ Nouveau RDV</button>
+      <div class="seg-ctrl">
+        <button class="seg-btn on">À venir</button>
+        <button class="seg-btn">Historique</button>
+      </div>
+      <div class="stats-row">
+        <div class="stat">
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+          </svg>
+          <b>5</b>&nbsp;RDV
+        </div>
+        <div class="stat">
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>
+          </svg>
+          <b>57s</b>&nbsp;moy.
+        </div>
+      </div>
+    </div>
+
+    <nav class="topbar-nav">
+      <button class="nav-tab on">
+        <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+        </svg>
+        Calendrier
+      </button>
+      <button class="nav-tab">Liste</button>
+      <button class="nav-tab">Rappels</button>
+      <button class="nav-tab">
+        <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path d="M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z"/>
+        </svg>
+        Stats
+      </button>
+      <button class="nav-tab">
+        <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.59 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 6 6l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16l.27.92z"/>
+        </svg>
+        Appels
+      </button>
+      <button class="nav-tab">Paramètres</button>
+      <button class="theme-btn" id="themeToggle" title="Basculer le thème">🌙</button>
+    </nav>
+  </header>
+
+  <!-- ════ FILTER BAR ════ -->
+  <div class="filter-bar">
+    <span class="filter-label">Coiffeurs</span>
+    <div class="sep-v"></div>
+    <button class="stylist-pill on" data-stylist="tous">Tous</button>
+    <button class="stylist-pill" data-stylist="hugo">
+      <span class="dot" style="background:#C06545"></span>Hugo
+    </button>
+    <button class="stylist-pill" data-stylist="karim">
+      <span class="dot" style="background:#4A8070"></span>Karim
+    </button>
+    <button class="stylist-pill" data-stylist="lea">
+      <span class="dot" style="background:#8A6AAE"></span>Léa
+    </button>
+    <button class="stylist-pill" data-stylist="sophie">
+      <span class="dot" style="background:#B88A50"></span>Sophie
+    </button>
+  </div>
+
+  <!-- ════ CALENDAR ════ -->
+  <div class="cal-wrap">
+    <div class="cal-head" id="calHead"></div>
+    <div class="cal-scroll">
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+/* ── Auth gate — redirect to index.html if no token ──────────────── */
+(function() {
+  const t = localStorage.getItem('admin_token');
+  if (!t) { window.location.replace('index.html'); }
+})();
+
+/* ── HTML escape helper — prevent XSS in innerHTML ───────────────── */
+function esc(s) {
+  if (s == null) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+/* ── Config ─────────────────────────────────────────────────────── */
+const HOUR_H  = 64;   // px per hour
+const H_START = 9;    // 9h
+const H_END   = 19;   // 19h
+const N_HOURS = H_END - H_START;
+
+const STYLISTS = {
+  hugo:   { name: 'Hugo',   color: '#C06545', rgb: '192,101,69'  },
+  karim:  { name: 'Karim',  color: '#4A8070', rgb: '74,128,112'  },
+  lea:    { name: 'Léa',    color: '#8A6AAE', rgb: '138,106,174' },
+  sophie: { name: 'Sophie', color: '#B88A50', rgb: '184,138,80'  },
+};
+
+const DAYS = [
+  { abbr: 'Mar.', num: 17, today: false },
+  { abbr: 'Mer.', num: 18, today: false },
+  { abbr: 'Jeu.', num: 19, today: true  },
+  { abbr: 'Ven.', num: 20, today: false },
+  { abbr: 'Sam.', num: 21, today: false },
+];
+
+const APPTS = [
+  // Mardi 17
+  { day: 0, start: 10.5, dur: 1.5, client: 'Mathilde R.',  svc: 'Coupe + brushing',  stylist: 'lea'    },
+  { day: 0, start: 14,   dur: 1,   client: 'Emma B.',      svc: 'Coupe femme',        stylist: 'hugo'   },
+  { day: 0, start: 16,   dur: 1.5, client: 'Françoise D.', svc: 'Balayage partiel',   stylist: 'karim'  },
+  // Mercredi 18
+  { day: 1, start: 9,    dur: 2.5, client: 'Isabelle C.',  svc: 'Balayage complet',   stylist: 'karim'  },
+  { day: 1, start: 9,    dur: 1,   client: 'Anne T.',      svc: 'Brushing express',   stylist: 'hugo'   },
+  { day: 1, start: 12,   dur: 1,   client: 'Lucie M.',     svc: 'Brushing',           stylist: 'lea'    },
+  { day: 1, start: 15,   dur: 1.5, client: 'Nathalie D.',  svc: 'Coupe courte',       stylist: 'hugo'   },
+  // Jeudi 19 (aujourd'hui)
+  { day: 2, start: 10,   dur: 1,   client: 'Marie-H. L.',  svc: 'Coupe femme',        stylist: 'sophie' },
+  { day: 2, start: 11.5, dur: 2,   client: 'Céline P.',    svc: 'Couleur + soin',     stylist: 'karim'  },
+  { day: 2, start: 14.5, dur: 1,   client: 'Patricia N.',  svc: 'Brushing',           stylist: 'lea'    },
+  // Vendredi 20
+  { day: 3, start: 9.5,  dur: 1,   client: 'Claire M.',    svc: 'Brushing',           stylist: 'hugo'   },
+  { day: 3, start: 13,   dur: 1,   client: 'Claire M.',    svc: 'Coupe femme',        stylist: 'karim'  },
+  { day: 3, start: 13,   dur: 1,   client: 'Claire M.',    svc: 'Coupe femme',        stylist: 'lea'    },
+  { day: 3, start: 13,   dur: 1,   client: 'Claire M.',    svc: 'Coupe femme',        stylist: 'hugo'   },
+  { day: 3, start: 14.5, dur: 1,   client: 'Claire M.',    svc: 'Coupe femme',        stylist: 'hugo'   },
+  { day: 3, start: 17,   dur: 1,   client: 'Claire M.',    svc: 'Coupe femme',        stylist: 'sophie' },
+  // Samedi 21
+  { day: 4, start: 10,   dur: 2,   client: 'Stéphanie B.', svc: 'Mèches full head',   stylist: 'sophie' },
+  { day: 4, start: 14,   dur: 1,   client: 'Anne-S. V.',   svc: 'Coupe + brushing',   stylist: 'lea'    },
+  { day: 4, start: 15.5, dur: 1,   client: 'Dominique L.', svc: 'Coupe homme',        stylist: 'hugo'   },
+];
+
+/* ── Overlap layout ───────────────────────────────────────────── */
+function layoutDay(appts) {
+  const sorted = [...appts].sort((a, b) => a.start - b.start);
+  const colEnds = [];
+  const placed = [];
+
+  for (const a of sorted) {
+    const end = a.start + a.dur;
+    let col = -1;
+    for (let i = 0; i < colEnds.length; i++) {
+      if (colEnds[i] <= a.start + 0.01) { col = i; colEnds[i] = end; break; }
+    }
+    if (col === -1) { col = colEnds.length; colEnds.push(end); }
+    placed.push({ ...a, col });
+  }
+
+  for (const p of placed) {
+    let maxCol = p.col;
+    const pEnd = p.start + p.dur;
+    for (const q of placed) {
+      if (q === p) continue;
+      if (q.start < pEnd - 0.01 && (q.start + q.dur) > p.start + 0.01) {
+        maxCol = Math.max(maxCol, q.col);
+      }
+    }
+    p.totalCols = maxCol + 1;
+  }
+  return placed;
+}
+
+/* ── Helpers ──────────────────────────────────────────────────── */
+function fmtH(h) {
+  const hrs  = Math.floor(h);
+  const mins = Math.round((h - hrs) * 60);
+  return `${hrs}h${mins > 0 ? String(mins).padStart(2, '0') : ''}`;
+}
+
+function isDark() {
+  return document.documentElement.dataset.theme === 'dark';
+}
+
+/* ── Build calendar headers ──────────────────────────────────── */
+function buildHead() {
+  const head = document.getElementById('calHead');
+  head.innerHTML = '';
+
+  // Empty gutter
+  const g = document.createElement('div');
+  g.className = 'cal-head-gutter';
+  head.appendChild(g);
+
+  DAYS.forEach((d, i) => {
+    const el = document.createElement('div');
+    el.className = 'cal-head-day' + (d.today ? ' today' : '');
+    el.style.animationDelay = `${i * 0.05}s`;
+    el.innerHTML = `<span class="d-abbr">${esc(d.abbr)}</span><span class="d-num">${esc(d.num)}</span>`;
+    head.appendChild(el);
+  });
+}
+
+/* ── Build calendar grid ─────────────────────────────────────── */
+function buildGrid(filter = 'tous') {
+  const grid = document.getElementById('calGrid');
+  grid.innerHTML = '';
+  grid.style.minHeight = `${N_HOURS * HOUR_H + 1}px`;
+
+  const dark  = isDark();
+  const alpha = dark ? 0.17 : 0.10;
+
+  // Time gutter
+  const timeGutter = document.createElement('div');
+  timeGutter.className = 'time-gutter';
+  for (let h = H_START; h <= H_END; h++) {
+    const mark = document.createElement('div');
+    mark.className = 'time-mark';
+    mark.textContent = h < H_END ? `${h}h` : '';
+    timeGutter.appendChild(mark);
+  }
+  grid.appendChild(timeGutter);
+
+  // Day columns
+  DAYS.forEach((d, dayIdx) => {
+    const col = document.createElement('div');
+    col.className = 'day-col';
+    col.style.minHeight = `${N_HOURS * HOUR_H}px`;
+
+    // Hour lines + half-hour lines
+    for (let h = 0; h < N_HOURS; h++) {
+      const line = document.createElement('div');
+      line.className = 'h-line';
+      line.style.top = `${h * HOUR_H}px`;
+      col.appendChild(line);
+
+      const half = document.createElement('div');
+      half.className = 'h-line half';
+      half.style.top = `${h * HOUR_H + HOUR_H / 2}px`;
+      col.appendChild(half);
+    }
+    // Bottom border
+    const bottom = document.createElement('div');
+    bottom.className = 'h-line';
+    bottom.style.top = `${N_HOURS * HOUR_H}px`;
+    col.appendChild(bottom);
+
+    // Current time line (today only)
+    if (d.today) {
+      const now  = new Date();
+      const nowH = now.getHours() + now.getMinutes() / 60;
+      if (nowH >= H_START && nowH <= H_END) {
+        const line = document.createElement('div');
+        line.className = 'now-line';
+        line.style.top = `${(nowH - H_START) * HOUR_H}px`;
+        col.appendChild(line);
+      }
+    }
+
+    // Appointments
+    const dayAppts = APPTS.filter(a =>
+      a.day === dayIdx && (filter === 'tous' || a.stylist === filter)
+    );
+    const laid = layoutDay(dayAppts);
+
+    laid.forEach((a, i) => {
+      const s      = STYLISTS[a.stylist];
+      const top    = (a.start - H_START) * HOUR_H;
+      const height = a.dur * HOUR_H - 3;
+
+      const gutter = 1.5; // %
+      const avail  = 100 - gutter * 2;
+      const colW   = avail / a.totalCols;
+      const left   = gutter + a.col * colW;
+      const width  = colW - 1;
+
+      const bg = `rgba(${s.rgb}, ${alpha})`;
+
+      const card = document.createElement('div');
+      card.className = 'appt';
+      card.style.cssText = `
+        top: ${top + 2}px;
+        height: ${height}px;
+        left: ${left}%;
+        width: ${width}%;
+        background: ${bg};
+        box-shadow: 0 1px 4px var(--shadow-card);
+        animation-delay: ${0.08 + i * 0.035}s;
+      `;
+
+      // Colored left border
+      const border = document.createElement('div');
+      border.className = 'appt-border';
+      border.style.background = s.color;
+      card.appendChild(border);
+
+      // Content
+      const name = document.createElement('div');
+      name.className = 'appt-name';
+      name.textContent = a.client;
+      card.appendChild(name);
+
+      if (height > 30) {
+        const svc = document.createElement('div');
+        svc.className = 'appt-svc';
+        svc.textContent = a.svc;
+        card.appendChild(svc);
+      }
+
+      if (height > 50) {
+        const meta = document.createElement('div');
+        meta.className = 'appt-time';
+        meta.textContent = `${fmtH(a.start)} · ${s.name}`;
+        card.appendChild(meta);
+      }
+
+      col.appendChild(card);
+    });
+
+    grid.appendChild(col);
+  });
+}
+
+/* ── Theme toggle ─────────────────────────────────────────────── */
+const html      = document.documentElement;
+const themeBtn  = document.getElementById('themeToggle');
+
+function setTheme(dark) {
+  html.dataset.theme = dark ? 'dark' : 'light';
+  themeBtn.textContent = dark ? '☀️' : '🌙';
+  localStorage.setItem('me-theme', dark ? 'dark' : 'light');
+  buildGrid(activeFilter);
+}
+
+themeBtn.addEventListener('click', () => setTheme(!isDark()));
+
+// Restore saved preference
+const saved = localStorage.getItem('me-theme');
+if (saved === 'dark') {
+  html.dataset.theme = 'dark';
+  themeBtn.textContent = '☀️';
+}
+
+/* ── Stylist filter ───────────────────────────────────────────── */
+let activeFilter = 'tous';
+
+document.querySelectorAll('.stylist-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.stylist-pill').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    activeFilter = btn.dataset.stylist;
+    buildGrid(activeFilter);
+  });
+});
+
+/* ── Nav tabs ─────────────────────────────────────────────────── */
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('on'));
+    tab.classList.add('on');
+  });
+});
+
+/* ── Segment control ──────────────────────────────────────────── */
+document.querySelectorAll('.seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+  });
+});
+
+/* ── Init ─────────────────────────────────────────────────────── */
+buildHead();
+buildGrid();
+
+// Auto-scroll to show current time (with 1h buffer above)
+const nowH = new Date().getHours() + new Date().getMinutes() / 60;
+if (nowH >= H_START && nowH <= H_END) {
+  const scrollEl = document.querySelector('.cal-scroll');
+  const target   = Math.max(0, (nowH - H_START - 1) * HOUR_H);
+  scrollEl.scrollTop = target;
+}
+</script>
+</body>
+</html>

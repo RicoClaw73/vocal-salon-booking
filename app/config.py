@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # ── App ───────────────────────────────────────────────────
     APP_TITLE: str = "Salon Booking API"
     APP_VERSION: str = "0.1.0"
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     # ── Slot engine ───────────────────────────────────────────
     SLOT_GRANULARITY_MIN: int = 15  # Slots proposed every 15 min

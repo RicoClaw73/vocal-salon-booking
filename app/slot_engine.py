@@ -129,6 +129,7 @@ async def check_booking_conflict(
     start: datetime,
     end: datetime,
     exclude_booking_id: int | None = None,
+    tenant_id: int | None = None,
 ) -> bool:
     """Return True if the employee already has an overlapping booking."""
     query = select(Booking).where(
@@ -139,7 +140,9 @@ async def check_booking_conflict(
             Booking.end_time > start,
         )
     )
-    if exclude_booking_id:
+    if tenant_id is not None:
+        query = query.where(Booking.tenant_id == tenant_id)
+    if exclude_booking_id is not None:
         query = query.where(Booking.id != exclude_booking_id)
     result = await session.execute(query)
     return result.scalars().first() is not None
@@ -223,7 +226,7 @@ async def validate_booking_request(
     )
     buffered_end = end_time + timedelta(minutes=buffer_min)
     has_conflict = await check_booking_conflict(
-        session, employee_id, start_time, buffered_end, exclude_booking_id
+        session, employee_id, start_time, buffered_end, exclude_booking_id, tenant_id
     )
     if has_conflict:
         return False, f"{employee.prenom} a déjà un rendez-vous sur ce créneau.", None
@@ -231,7 +234,7 @@ async def validate_booking_request(
     # Also check that nothing ends too close before our start
     buffer_before = timedelta(minutes=buffer_min)
     pre_conflict = await _check_pre_buffer_conflict(
-        session, employee_id, start_time, buffer_before, exclude_booking_id
+        session, employee_id, start_time, buffer_before, exclude_booking_id, tenant_id
     )
     if pre_conflict:
         msg = f"Créneau trop proche d'un RDV précédent (buffer {buffer_min}min requis)."
@@ -361,20 +364,21 @@ async def _get_bookings_for_date(
     session: AsyncSession,
     employee_id: str,
     target_date: date,
+    tenant_id: int | None = None,
 ) -> list[Booking]:
     """Get all confirmed bookings for an employee on a specific date."""
     day_start = datetime.combine(target_date, time(0, 0))
     day_end = datetime.combine(target_date + timedelta(days=1), time(0, 0))
-    result = await session.execute(
-        select(Booking).where(
-            and_(
-                Booking.employee_id == employee_id,
-                Booking.status == BookingStatus.confirmed,
-                Booking.start_time >= day_start,
-                Booking.start_time < day_end,
-            )
-        )
+    conditions = and_(
+        Booking.employee_id == employee_id,
+        Booking.status == BookingStatus.confirmed,
+        Booking.start_time >= day_start,
+        Booking.start_time < day_end,
     )
+    query = select(Booking).where(conditions)
+    if tenant_id is not None:
+        query = query.where(Booking.tenant_id == tenant_id)
+    result = await session.execute(query)
     return list(result.scalars().all())
 
 
@@ -401,6 +405,7 @@ async def _check_pre_buffer_conflict(
     start_time: datetime,
     buffer: timedelta,
     exclude_booking_id: int | None = None,
+    tenant_id: int | None = None,
 ) -> bool:
     """Check if a booking ends too close before our proposed start."""
     buffer_window_start = start_time - buffer
@@ -412,7 +417,9 @@ async def _check_pre_buffer_conflict(
             Booking.end_time <= start_time,
         )
     )
-    if exclude_booking_id:
+    if tenant_id is not None:
+        query = query.where(Booking.tenant_id == tenant_id)
+    if exclude_booking_id is not None:
         query = query.where(Booking.id != exclude_booking_id)
     result = await session.execute(query)
     return result.scalars().first() is not None

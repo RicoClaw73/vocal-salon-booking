@@ -220,8 +220,19 @@ async def append_transcript_event(
 async def get_transcript_events(
     db: AsyncSession,
     session_id: str,
+    tenant_id: int | None = None,
 ) -> list[dict]:
     """Return all transcript events for a session, ordered by turn number."""
+    if tenant_id is not None:
+        # Verify session belongs to tenant before returning events
+        session_result = await db.execute(
+            select(VoiceSession).where(
+                VoiceSession.session_id == session_id,
+                VoiceSession.tenant_id == tenant_id,
+            )
+        )
+        if session_result.scalars().first() is None:
+            return []
     result = await db.execute(
         select(TranscriptEvent)
         .where(TranscriptEvent.session_id == session_id)

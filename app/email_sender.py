@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from html import escape
 
 import httpx
 
@@ -52,23 +53,23 @@ async def send_owner_booking_email(
 
     html = (
         "<div style='font-family:sans-serif;color:#1e293b;max-width:560px'>"
-        "<h2 style='margin:0 0 16px'>Nouveau rendez-vous #{booking_id}</h2>"
+        f"<h2 style='margin:0 0 16px'>Nouveau rendez-vous #{booking_id}</h2>"
         "<table style='border-collapse:collapse;width:100%'>"
         "<tr><td style='padding:6px 0;color:#64748b;width:130px'>Prestation</td>"
-        f"<td style='padding:6px 0'><strong>{svc_label}</strong></td></tr>"
+        f"<td style='padding:6px 0'><strong>{escape(svc_label)}</strong></td></tr>"
         "<tr><td style='padding:6px 0;color:#64748b'>Coiffeur·se</td>"
-        f"<td style='padding:6px 0'>{emp_name}</td></tr>"
+        f"<td style='padding:6px 0'>{escape(emp_name)}</td></tr>"
         "<tr><td style='padding:6px 0;color:#64748b'>Date</td>"
-        f"<td style='padding:6px 0'>{date_display} à {time_str}</td></tr>"
+        f"<td style='padding:6px 0'>{escape(date_display)} à {escape(time_str)}</td></tr>"
         "<tr><td style='padding:6px 0;color:#64748b'>Client</td>"
-        f"<td style='padding:6px 0'>{client_name}</td></tr>"
+        f"<td style='padding:6px 0'>{escape(client_name)}</td></tr>"
         "<tr><td style='padding:6px 0;color:#64748b'>Téléphone</td>"
-        f"<td style='padding:6px 0'>{phone_display}</td></tr>"
+        f"<td style='padding:6px 0'>{escape(phone_display)}</td></tr>"
         "</table>"
         "<p style='margin-top:24px;color:#94a3b8;font-size:13px'>"
-        f"{settings.SALON_NAME} — Tableau de bord → Réservations</p>"
+        f"{escape(settings.SALON_NAME)} — Tableau de bord → Réservations</p>"
         "</div>"
-    ).format(booking_id=booking_id)
+    )
 
     subject = f"[{settings.SALON_NAME}] Nouveau RDV #{booking_id} — {client_name}"
 
@@ -117,20 +118,21 @@ async def send_callback_notification(
 
     lines = [
         "<h2 style='margin:0 0 16px'>Nouvelle demande de rappel</h2>",
-        f"<p><strong>N° :</strong> {phone_display}</p>",
-        f"<p><strong>Reçue le :</strong> {date_str}</p>",
+        f"<p><strong>N° :</strong> {escape(phone_display)}</p>",
+        f"<p><strong>Reçue le :</strong> {escape(date_str)}</p>",
         f"<p><strong>Réf. :</strong> #{callback_id}</p>",
     ]
     if recording_url:
+        safe_url = recording_url if recording_url.startswith("https://") else ""
         lines.append(
             f"<p><strong>Enregistrement :</strong> "
-            f'<a href="{recording_url}">Écouter le message</a></p>'
+            f'<a href="{escape(safe_url)}">Écouter le message</a></p>'
         )
     if transcription:
         lines.append(
             f"<p><strong>Transcription :</strong></p>"
             f"<blockquote style='border-left:3px solid #e2e8f0;margin:0;padding:8px 16px;"
-            f"color:#475569'>{transcription}</blockquote>"
+            f"color:#475569'>{escape(transcription)}</blockquote>"
         )
     else:
         lines.append("<p><em>Transcription en cours…</em></p>")

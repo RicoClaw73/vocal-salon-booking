@@ -1100,6 +1100,14 @@ function esc(s) {
   return d.innerHTML;
 }
 
+// Authenticated fetch — sends token as X-API-Key header instead of query param
+function apiFetch(url, opts = {}) {
+  if (token) {
+    opts = { ...opts, headers: { 'X-API-Key': token, ...(opts.headers || {}) } };
+  }
+  return fetch(url, opts);
+}
+
 const PALETTE = [
   { bg:'#C06545', rgb:'192,101,69',  light:'#fdf0eb', border:'#C06545', text:'#fff' },
   { bg:'#4A8070', rgb:'74,128,112',  light:'#eaf2f0', border:'#4A8070', text:'#fff' },
@@ -1178,8 +1186,8 @@ async function loadBookings() {
   try {
     const p = new URLSearchParams({ days: 365 });
     if (historyMode) p.set('past', 'true');
-    if (token) p.append('token', token);
-    const r = await fetch(`/api/v1/admin/bookings?${p}`);
+    
+    const r = await apiFetch(`/api/v1/admin/bookings?${p}`);
     if (r.status === 401) { showLogin(); return; }
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     bookings = await r.json();
@@ -1542,8 +1550,8 @@ async function cancelBooking() {
   if (!confirm('Annuler ce rendez-vous ?')) return;
   try {
     const p = new URLSearchParams();
-    if (token) p.append('token', token);
-    const r = await fetch(`/api/v1/bookings/${selectedId}?${p}`, { method: 'DELETE' });
+    
+    const r = await apiFetch(`/api/v1/bookings/${selectedId}?${p}`, { method: 'DELETE' });
     if (r.ok || r.status === 200) {
       bookings = bookings.filter(b => b.id !== selectedId);
       closeDrawer(); render(); showToast('Rendez-vous annulé');
@@ -1641,8 +1649,8 @@ let cbFilter     = 'pending';
 async function loadCallbacks() {
   try {
     const p = new URLSearchParams();
-    if (token) p.append('token', token);
-    const r = await fetch(`/api/v1/admin/callbacks?${p}`);
+    
+    const r = await apiFetch(`/api/v1/admin/callbacks?${p}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     callbacks = await r.json();
     updateCbBadge();
@@ -1790,7 +1798,7 @@ async function openCreateModal(preEmpId = null, preDate = null) {
 
   try {
     const p = new URLSearchParams();
-    if (token) p.append('token', token);
+    
     const [svcsRes, empsRes] = await Promise.all([
       fetch(`/api/v1/admin/services?${p}`),
       fetch(`/api/v1/admin/employees?${p}`),
@@ -1888,7 +1896,7 @@ async function checkCreateSlots(svcId, dateVal) {
   try {
     const p = new URLSearchParams({ service_id: svcId, date: dateVal });
     if (empId) p.append('employee_id', empId);
-    const r = await fetch(`/api/v1/availability/search?${p}`);
+    const r = await apiFetch(`/api/v1/availability/search?${p}`);
     if (!r.ok) throw new Error();
     const slots = await r.json();
 
@@ -1955,7 +1963,7 @@ async function submitCreateBooking() {
       start_time:   createSelectedSlot.start_time,
       notes,
     };
-    const r = await fetch('/api/v1/bookings', {
+    const r = await apiFetch('/api/v1/bookings', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
@@ -1984,8 +1992,8 @@ let statsData = null;
 async function loadStats() {
   try {
     const p = new URLSearchParams();
-    if (token) p.append('token', token);
-    const r = await fetch(`/api/v1/admin/stats?${p}`);
+    
+    const r = await apiFetch(`/api/v1/admin/stats?${p}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     statsData = await r.json();
     renderStats();
@@ -2133,7 +2141,7 @@ function unlockTechnique() {
 async function loadSettingsView() {
   techniqueUnlocked = false;
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
+  
   try {
     const [settingsResp, empResp, svcResp] = await Promise.all([
       fetch(`/api/v1/admin/settings?${p}`),
@@ -2154,7 +2162,7 @@ async function loadSettingsView() {
 
 async function reloadEmployeesAndServices() {
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
+  
   const [empResp, svcResp] = await Promise.all([
     fetch(`/api/v1/admin/employees?${p}`),
     fetch(`/api/v1/admin/services?${p}`),
@@ -2293,7 +2301,7 @@ function saveOpeningHours() {
     hours[d] = { active: check?.checked || false, start: start?.value || '09:00', end: end?.value || '19:00' };
   });
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
+  
   fetch(`/api/v1/admin/settings?${p}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -2366,7 +2374,7 @@ async function savePlanning() {
   const rows = document.querySelectorAll('#settingsSections [data-emp-id]');
   const days = ['lun','mar','mer','jeu','ven','sam','dim'];
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
+  
   const promises = [];
   rows.forEach(row => {
     const empId = row.dataset.empId;
@@ -2387,7 +2395,7 @@ async function savePlanning() {
   });
   await Promise.all(promises);
   showToast('Planning enregistré ✓');
-  const empResp = await fetch(`/api/v1/admin/employees?${p}`);
+  const empResp = await apiFetch(`/api/v1/admin/employees?${p}`);
   settingsEmployees = await empResp.json();
 }
 
@@ -2441,8 +2449,8 @@ function openAddEmployeeForm() {
 
 async function addEmployee(prenom, nom) {
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
-  const r = await fetch(`/api/v1/employees?${p}`, {
+  
+  const r = await apiFetch(`/api/v1/employees?${p}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prenom, nom, role: '', horaires_json: '{}', notes: '' }),
@@ -2464,8 +2472,8 @@ function openEditEmployeeForm(id) {
 
 async function editEmployee(id, prenom, nom, role) {
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
-  const r = await fetch(`/api/v1/employees/${id}?${p}`, {
+  
+  const r = await apiFetch(`/api/v1/employees/${id}?${p}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prenom, nom, role }),
@@ -2479,8 +2487,8 @@ async function deleteEmployee(id) {
   const emp = settingsEmployees.find(e => e.id === id);
   if (!confirm(`Supprimer ${emp?.prenom || 'cet·te employé·e'} ? Cette action est irréversible.`)) return;
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
-  const r = await fetch(`/api/v1/employees/${id}?${p}`, { method: 'DELETE' });
+  
+  const r = await apiFetch(`/api/v1/employees/${id}?${p}`, { method: 'DELETE' });
   if (!r.ok) { showToast('Erreur lors de la suppression'); return; }
   await reloadEmployeesAndServices();
   showToast('Coiffeur·se supprimé·e ✓');
@@ -2497,8 +2505,8 @@ function openAddServiceForm() {
 
 async function addService(data) {
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
-  const r = await fetch(`/api/v1/services?${p}`, {
+  
+  const r = await apiFetch(`/api/v1/services?${p}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -2520,8 +2528,8 @@ function openEditServiceForm(id) {
 
 async function editService(id, data) {
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
-  const r = await fetch(`/api/v1/services/${id}?${p}`, {
+  
+  const r = await apiFetch(`/api/v1/services/${id}?${p}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -2535,8 +2543,8 @@ async function deleteService(id) {
   const svc = settingsServices.find(s => s.id === id);
   if (!confirm(`Supprimer "${svc?.label || 'ce service'}" ? Cette action est irréversible.`)) return;
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
-  const r = await fetch(`/api/v1/services/${id}?${p}`, { method: 'DELETE' });
+  
+  const r = await apiFetch(`/api/v1/services/${id}?${p}`, { method: 'DELETE' });
   if (!r.ok) { showToast('Erreur lors de la suppression'); return; }
   await reloadEmployeesAndServices();
   showToast('Service supprimé ✓');
@@ -2550,9 +2558,9 @@ async function loadSessionsView() {
   const container = document.getElementById('sessionsList');
   container.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Chargement…</p>';
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
+  
   try {
-    const r = await fetch(`/api/v1/admin/sessions?${p}`);
+    const r = await apiFetch(`/api/v1/admin/sessions?${p}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     sessionsData = await r.json();
     selectedSessionId = null;
@@ -2637,9 +2645,9 @@ async function fetchAndRenderTranscript(sessionId) {
   if (!el) return;
   el.innerHTML = '<p class="text-xs text-slate-400 text-center py-3">Chargement…</p>';
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
+  
   try {
-    const r = await fetch(`/api/v1/admin/sessions/${sessionId}?${p}`);
+    const r = await apiFetch(`/api/v1/admin/sessions/${sessionId}?${p}`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
     el.innerHTML = renderTranscript(data.transcript);
@@ -2814,8 +2822,8 @@ async function saveSection(sectionId, keys) {
 
   try {
     const p = new URLSearchParams();
-    if (token) p.append('token', token);
-    const r = await fetch(`/api/v1/admin/settings?${p}`, {
+    
+    const r = await apiFetch(`/api/v1/admin/settings?${p}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -2845,8 +2853,8 @@ async function saveSection(sectionId, keys) {
 async function markCallback(id, newStatus) {
   try {
     const p = new URLSearchParams();
-    if (token) p.append('token', token);
-    const r = await fetch(`/api/v1/admin/callbacks/${id}?${p}`, {
+    
+    const r = await apiFetch(`/api/v1/admin/callbacks/${id}?${p}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: newStatus }),
@@ -2902,8 +2910,8 @@ function getDayRange(dateObj) {
 async function loadDayEmployees() {
   if (dayEmployees !== null) return dayEmployees;
   const p = new URLSearchParams();
-  if (token) p.append('token', token);
-  const r = await fetch(`/api/v1/admin/employees?${p}`);
+  
+  const r = await apiFetch(`/api/v1/admin/employees?${p}`);
   dayEmployees = r.ok ? await r.json() : [];
   return dayEmployees;
 }

@@ -274,16 +274,6 @@ SETTINGS_METADATA: list[dict[str, Any]] = [
         "type": "int",
         "is_sensitive": False,
     },
-    # ── Sécurité ─────────────────────────────────────────────
-    {
-        "key": "VOICE_API_KEY",
-        "label": "Token admin dashboard",
-        "description": "Clé requise pour accéder au dashboard. Laissez vide pour désactiver l'authentification.",
-        "section": "Sécurité",
-        "tab": "vocal",
-        "type": "str",
-        "is_sensitive": True,
-    },
 
     # ══════════════════════════════════════════
     # TAB: sms  (notifications & templates SMS)

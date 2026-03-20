@@ -14,6 +14,7 @@ Never raises — a failed SMS must never block the booking confirmation.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, datetime
 
 import httpx
@@ -21,6 +22,13 @@ import httpx
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+_E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
+
+
+def _is_valid_phone(phone: str) -> bool:
+    """Return True if phone is a plausible E.164 number."""
+    return bool(_E164_RE.match(phone))
 
 _DAYS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 _MONTHS_FR = [
@@ -273,7 +281,7 @@ async def send_booking_reminder(
         logger.debug("Reminder SMS skipped: Twilio credentials not configured")
         return False
 
-    if not client_phone or client_phone.lower() in ("anonymous", "unknown", ""):
+    if not client_phone or client_phone.lower() in ("anonymous", "unknown", "") or not _is_valid_phone(client_phone):
         logger.debug("Reminder SMS skipped: no valid client phone number")
         return False
 

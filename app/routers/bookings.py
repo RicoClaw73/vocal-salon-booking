@@ -10,13 +10,17 @@ DELETE /bookings/{id}       – cancel a booking
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth import get_tenant_from_slug
+from app.auth import get_current_tenant, get_tenant_from_slug
+from app.rate_limit import rate_limit_dependency
 from app.database import get_db
 from app.email_sender import send_owner_booking_email
 from app.models import Booking, BookingStatus, Tenant
@@ -61,11 +65,12 @@ def _booking_to_out(booking: Booking) -> BookingOut:
     )
 
 
-@router.post("", response_model=BookingOut, status_code=201)
+@router.post("", response_model=BookingOut, status_code=201,
+             dependencies=[Depends(rate_limit_dependency)])
 async def create_booking(
     payload: BookingCreate,
     db: AsyncSession = Depends(get_db),
-    tenant: Tenant = Depends(get_tenant_from_slug),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> BookingOut:
     """Create a new salon booking after validating against business rules."""
     ok, message, end_time = await validate_booking_request(
@@ -97,7 +102,7 @@ async def create_booking(
     emp_name = f"{loaded.employee.prenom} {loaded.employee.nom}" if loaded.employee else payload.employee_id
     date_str = payload.start_time.strftime("%Y-%m-%d")
     time_str = payload.start_time.strftime("%H:%M")
-    asyncio.create_task(send_owner_booking_alert(
+    _t1 = asyncio.create_task(send_owner_booking_alert(
         booking_id=loaded.id,
         svc_label=svc_label,
         emp_name=emp_name,
@@ -106,7 +111,8 @@ async def create_booking(
         client_name=payload.client_name,
         client_phone=payload.client_phone,
     ))
-    asyncio.create_task(send_owner_booking_email(
+    _t1.add_done_callback(lambda t: logger.error("send_owner_booking_alert failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
+    _t2 = asyncio.create_task(send_owner_booking_email(
         booking_id=loaded.id,
         svc_label=svc_label,
         emp_name=emp_name,
@@ -115,6 +121,7 @@ async def create_booking(
         client_name=payload.client_name,
         client_phone=payload.client_phone,
     ))
+    _t2.add_done_callback(lambda t: logger.error("send_owner_booking_email failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
 
     return _booking_to_out(loaded)
 
@@ -137,7 +144,7 @@ async def reschedule_booking(
     booking_id: int,
     payload: BookingReschedule,
     db: AsyncSession = Depends(get_db),
-    tenant: Tenant = Depends(get_tenant_from_slug),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> BookingOut:
     """Reschedule a booking to a new time (and optionally new employee)."""
     booking = await _get_booking_with_rels(db, booking_id, tenant_id=tenant.id)
@@ -171,7 +178,7 @@ async def reschedule_booking(
 async def cancel_booking(
     booking_id: int,
     db: AsyncSession = Depends(get_db),
-    tenant: Tenant = Depends(get_tenant_from_slug),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> BookingCancelOut:
     """Cancel a booking."""
     result = await db.execute(
@@ -186,12 +193,13 @@ async def cancel_booking(
     booking.status = BookingStatus.cancelled
     await db.commit()
 
-    asyncio.create_task(send_owner_cancel_alert(
+    _t3 = asyncio.create_task(send_owner_cancel_alert(
         booking_id=booking.id,
         client_name=booking.client_name,
         client_phone=booking.client_phone,
         start_time=booking.start_time,
     ))
+    _t3.add_done_callback(lambda t: logger.error("send_owner_cancel_alert failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
 
     return BookingCancelOut(
         id=booking.id,
