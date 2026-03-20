@@ -39,6 +39,8 @@ class ConversationState:
     # RGPD consent: None=pending, True=accepted (implicit), False=refused
     consent_given: bool | None = None
     consent_at: datetime | None = None
+    # Persistent fallback counter — survives Twilio retries via DB
+    consecutive_fallbacks: int = 0
 
     def touch(self) -> None:
         """Update last_activity timestamp."""

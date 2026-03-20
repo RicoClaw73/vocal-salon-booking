@@ -233,6 +233,7 @@ class VoiceSession(Base):
     # RGPD consent: None=pending, True=accepted (implicit), False=refused (DTMF "1")
     consent_given: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     consent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False), nullable=True)
+    consecutive_fallbacks: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     # relationships
     events: Mapped[list["TranscriptEvent"]] = relationship(

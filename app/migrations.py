@@ -27,6 +27,10 @@ _MIGRATIONS: list[tuple[str, str]] = [
         "voice_sessions.consent_at",
         "ALTER TABLE voice_sessions ADD COLUMN consent_at DATETIME",
     ),
+    (
+        "voice_sessions.consecutive_fallbacks",
+        "ALTER TABLE voice_sessions ADD COLUMN consecutive_fallbacks INTEGER NOT NULL DEFAULT 0",
+    ),
 ]
 
 

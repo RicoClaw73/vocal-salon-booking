@@ -82,6 +82,7 @@ def _row_to_state(row: VoiceSession) -> ConversationState:
         messages=messages,
         consent_given=row.consent_given,
         consent_at=_ensure_aware(row.consent_at) if row.consent_at is not None else None,
+        consecutive_fallbacks=getattr(row, "consecutive_fallbacks", 0),
     )
     return state
 
@@ -101,6 +102,7 @@ def _state_to_row_dict(state: ConversationState) -> dict:
         "messages_json": json.dumps(state.messages) if state.messages else "[]",
         "consent_given": state.consent_given,
         "consent_at": state.consent_at,
+        "consecutive_fallbacks": state.consecutive_fallbacks,
     }
 
 

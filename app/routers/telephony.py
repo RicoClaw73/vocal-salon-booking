@@ -345,8 +345,8 @@ async def _handle_utterance(
     if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) \
             and not has_active_intent:
         is_fallback = True
-        consecutive = getattr(state, "_consecutive_fallbacks", 0) + 1
-        state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
+        consecutive = state.consecutive_fallbacks + 1
+        state.consecutive_fallbacks = consecutive
 
         if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
             response_text = _human_transfer_msg()
@@ -358,7 +358,7 @@ async def _handle_utterance(
 
         metrics.inc("voice_fallbacks")
     else:
-        state._consecutive_fallbacks = 0  # type: ignore[attr-defined]
+        state.consecutive_fallbacks = 0
 
         if intent != VoiceIntent.unknown:
             state.current_intent = intent

@@ -256,9 +256,7 @@ async def _resolve_session(
             # Carry over volatile in-memory attributes (e.g. fallback counter)
             old = conversation_manager._sessions.get(session_id)
             if old is not None:
-                state._consecutive_fallbacks = getattr(  # type: ignore[attr-defined]
-                    old, "_consecutive_fallbacks", 0
-                )
+                state.consecutive_fallbacks = old.consecutive_fallbacks
             # Sync into in-memory cache
             conversation_manager._sessions[session_id] = state
             return state
@@ -564,8 +562,8 @@ async def voice_turn(
     )
     if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) \
             and not has_active_intent:
-        consecutive = getattr(state, "_consecutive_fallbacks", 0) + 1
-        state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
+        consecutive = state.consecutive_fallbacks + 1
+        state.consecutive_fallbacks = consecutive
 
         if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
             response_text = _human_transfer_msg()
@@ -648,7 +646,7 @@ async def voice_turn(
         )
 
     # Reset consecutive fallback counter on successful intent
-    state._consecutive_fallbacks = 0  # type: ignore[attr-defined]
+    state.consecutive_fallbacks = 0
 
     # 6. Update session intent (new intent overrides, unless unknown)
     if intent != VoiceIntent.unknown:

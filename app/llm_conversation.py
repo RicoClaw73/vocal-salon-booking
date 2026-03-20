@@ -181,6 +181,7 @@ RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Utilise toujours check_slots AVANT de demander les informations du client (nom, téléphone).
 - Si check_slots confirme une disponibilité, demande le prénom et nom du client. Ne demande le numéro de téléphone QUE s'il n'est pas déjà disponible dans le contexte appel ci-dessous.
 - Avant d'appeler create_booking, confirme explicitement le service, la date ET l'heure réelle du créneau disponible — même si le client a mentionné une heure différente.
+- Si create_booking retourne une erreur de conflit ou d'indisponibilité (créneau pris entre la vérification et la confirmation), appelle immédiatement check_slots pour le même service et la même date pour trouver un nouveau créneau. Ne mentionne pas l'erreur technique — dis simplement "Ce créneau vient d'être pris, laissez-moi vérifier les disponibilités."
 - Dans la phrase de confirmation après create_booking, mentionne toujours la durée et le tarif de la prestation. Exemple : "Votre rendez-vous est confirmé : coupe enfant (25 min, 20€) avec Karim le 19 mars à 16h."
 - Si le client mentionne un coiffeur préféré, passe l'employee_id dans check_slots.
 - Ne mentionne JAMAIS les identifiants techniques (service_id, employee_id) au client.
@@ -190,10 +191,11 @@ RÈGLES CONVERSATIONNELLES (CRITIQUES — tu parles au téléphone)
 - Si le client demande un créneau le matin, passe time_to:"12:00" à check_slots.
 - Si le client demande un créneau l'après-midi, passe time_from:"13:00" à check_slots.
 - check_slots scanne automatiquement jusqu'à 14 jours en avant si aucun créneau ne correspond à la contrainte horaire — tu n'as pas besoin de rappeler l'outil plusieurs fois pour ça.
-- Pour une coloration, un balayage ou des mèches, demande toujours la longueur des cheveux (courts, mi-longs ou longs) AVANT d'appeler check_slots — le prix et la durée varient fortement.
+- Si check_slots renvoie un créneau à une date DIFFÉRENTE de celle demandée par le client, mentionne toujours explicitement la nouvelle date avant de proposer le créneau ("Le premier créneau disponible est le [jour date] à [heure]"). Ne dis jamais simplement "j'ai 9h" sans préciser la date quand elle diffère de la demande.
+- Pour une coupe femme, une coloration, un balayage, des mèches ou toute prestation dont le catalogue propose plusieurs variantes selon la longueur des cheveux, demande toujours la longueur (courts, mi-longs ou longs) AVANT d'appeler check_slots — le service_id et le tarif varient selon la longueur.
 - Si le client demande un service que tu ne reconnais pas dans le catalogue ci-dessous, ne l'invente pas. Dis-lui que ce service n'est pas proposé et oriente-le vers les prestations proches du catalogue.
 - Quand un outil retourne un message d'erreur ou d'échec, reformule-le toujours de façon naturelle et empathique — ne répète jamais le message brut.
-- Après avoir exécuté avec succès create_booking : demande au client s'il souhaite recevoir une confirmation par SMS ("Souhaitez-vous recevoir un SMS de confirmation ?"). Si oui, appelle send_sms_confirmation avec le numéro du rendez-vous. Si non, passe directement à la suite. Puis demande "Y a-t-il autre chose que je puisse faire pour vous ?"
+- Après avoir exécuté avec succès create_booking : demande au client s'il souhaite recevoir une confirmation par SMS ("Souhaitez-vous recevoir un SMS de confirmation ?"). Si oui, appelle send_sms_confirmation avec le numéro du rendez-vous. Si non, passe directement à la suite. Puis demande "Y a-t-il autre chose que je puisse faire pour vous ?" Ne propose le SMS que si un numéro de téléphone est visible dans la section CONTEXTE APPEL. Si aucun numéro n'est dans le contexte, passe directement à "Y a-t-il autre chose que je puisse faire pour vous ?".
 - Après cancel_booking ou reschedule_booking, demande directement "Y a-t-il autre chose que je puisse faire pour vous ?" sans proposer de SMS. Ne raccroche jamais immédiatement après une action.
 - Si tu ne peux pas résoudre un problème après 2 tentatives, ou si le client demande explicitement à parler à quelqu'un ou à laisser un message : appelle request_voicemail. Ne l'appelle pas si le problème est simplement une disponibilité nulle — propose d'autres créneaux à la place.
 - Ne dis JAMAIS qu'un créneau est indisponible à une heure précise sans avoir appelé check_slots avec time_from/time_to correspondants. Si le client demande "vers 16h", appelle check_slots avec time_from:"15:00" et time_to:"17:00" avant de conclure quoi que ce soit.
@@ -873,23 +875,29 @@ async def llm_turn(
 
     # Exceeded MAX_TOOL_ROUNDS — force a final response without tools
     logger.warning("llm_turn: MAX_TOOL_ROUNDS reached, forcing final response")
-    payload_no_tools: dict = {
-        "model": settings.LLM_MODEL,
-        "messages": [
-            {"role": "system", "content": build_system_prompt(today, client_phone, client_name)},
-            *working,
-        ],
-        "temperature": 0.4,
-        "max_tokens": 260,
-    }
-    headers = {
-        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        resp = await client.post(OPENAI_CHAT_URL, json=payload_no_tools, headers=headers)
-    final_text = resp.json()["choices"][0]["message"].get(
-        "content", "Désolée, une erreur est survenue."
-    )
+    try:
+        payload_no_tools: dict = {
+            "model": settings.LLM_MODEL,
+            "messages": [
+                {"role": "system", "content": build_system_prompt(today, client_phone, client_name)},
+                *working,
+            ],
+            "temperature": 0.4,
+            "max_tokens": 260,
+        }
+        headers = {
+            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+            resp = await client.post(OPENAI_CHAT_URL, json=payload_no_tools, headers=headers)
+        if resp.status_code != 200:
+            raise RuntimeError(f"OpenAI {resp.status_code}: {resp.text[:200]}")
+        final_text = resp.json()["choices"][0]["message"].get(
+            "content", "Désolée, une erreur est survenue."
+        )
+    except Exception as exc:
+        logger.error("llm_turn MAX_TOOL_ROUNDS fallback failed: %s", exc)
+        final_text = "Je suis désolée, je n'ai pas pu traiter votre demande. Y a-t-il autre chose que je puisse faire ?"
     working.append({"role": "assistant", "content": final_text})
     return final_text, working, action_taken

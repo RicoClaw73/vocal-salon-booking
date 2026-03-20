@@ -579,6 +579,7 @@ async def twilio_gather(
             _llm_ok = True
         except Exception as exc:
             logger.error("llm_turn failed, falling back to legacy pipeline: %s", exc)
+            metrics.inc("llm_turn_failed")
 
     if not _llm_ok:
         # Legacy intent → handler pipeline (fallback when LLM not configured or fails)
@@ -617,8 +618,8 @@ async def twilio_gather(
             if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) \
                     and not has_active_intent:
                 is_fallback = True
-                consecutive = getattr(state, "_consecutive_fallbacks", 0) + 1
-                state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
+                consecutive = state.consecutive_fallbacks + 1
+                state.consecutive_fallbacks = consecutive
 
                 if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
                     response_text = _human_transfer_msg()
@@ -630,7 +631,7 @@ async def twilio_gather(
 
                 metrics.inc("voice_fallbacks")
             else:
-                state._consecutive_fallbacks = 0  # type: ignore[attr-defined]
+                state.consecutive_fallbacks = 0
                 if intent != VoiceIntent.unknown:
                     state.current_intent = intent
                 _merge_entities_to_draft(state, entities)
