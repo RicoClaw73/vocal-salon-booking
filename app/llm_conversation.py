@@ -785,10 +785,20 @@ def is_available() -> bool:
 
 
 def trim_history(messages: list[dict]) -> list[dict]:
-    """Keep only the most recent MAX_HISTORY_MESSAGES messages."""
+    """Keep only the most recent MAX_HISTORY_MESSAGES messages.
+
+    Starts the trimmed window at the first 'user' message to avoid orphaned
+    'tool' entries (OpenAI returns 400 when a tool message has no preceding
+    assistant+tool_calls message, which causes a permanent fallback loop).
+    """
     if len(messages) <= MAX_HISTORY_MESSAGES:
         return messages
-    return messages[-MAX_HISTORY_MESSAGES:]
+    trimmed = messages[-MAX_HISTORY_MESSAGES:]
+    # Advance past any orphaned assistant/tool messages at the cut boundary.
+    for i, msg in enumerate(trimmed):
+        if msg.get("role") == "user":
+            return trimmed[i:]
+    return trimmed
 
 
 async def llm_turn(
