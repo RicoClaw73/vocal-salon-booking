@@ -775,7 +775,8 @@ async def _call_openai(
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
         resp = await client.post(OPENAI_CHAT_URL, json=payload, headers=headers)
     if resp.status_code != 200:
-        raise RuntimeError(f"OpenAI {resp.status_code}: {resp.text[:300]}")
+        logger.debug("OpenAI error body: %s", resp.text[:300])
+        raise RuntimeError(f"OpenAI API error: HTTP {resp.status_code}")
     return resp.json()["choices"][0]["message"]
 
 

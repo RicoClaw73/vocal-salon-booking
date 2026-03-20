@@ -58,6 +58,12 @@ router = APIRouter(prefix="/twilio", tags=["twilio"])
 # Pre-cached greeting filename (set at startup by warm_greeting_cache)
 _cached_greeting_filename: str | None = None
 
+# Farewell keywords — shared between LLM and legacy pipeline paths
+_FAREWELL_KEYWORDS = (
+    "au revoir", "bonne journée", "bonsoir", "bonne soirée",
+    "à bientôt", "merci, au revoir", "merci beaucoup", "c'est tout", "raccrocher",
+)
+
 # ── Constants ────────────────────────────────────────────────
 
 _VOICEMAIL_GOODBYE = (
@@ -567,16 +573,13 @@ async def twilio_gather(
             state.messages = new_messages
             action_taken = action_taken or "llm_response"
             # Detect natural farewell (in bot response OR user input) → hang up gracefully
-            _FAREWELL = (
-                "au revoir", "bonne journée", "bonsoir", "bonne soirée",
-                "à bientôt", "merci, au revoir", "c'est tout", "raccrocher",
-            )
-            if any(kw in response_text.lower() for kw in _FAREWELL) \
-                    or any(kw in user_text.lower() for kw in _FAREWELL):
+            if any(kw in response_text.lower() for kw in _FAREWELL_KEYWORDS) \
+                    or any(kw in user_text.lower() for kw in _FAREWELL_KEYWORDS):
                 action_taken = "session_ended"
             intent_str = "llm_driven"
             confidence = 1.0
             _llm_ok = True
+            state.consecutive_fallbacks = 0
         except Exception as exc:
             logger.error("llm_turn failed, falling back to legacy pipeline: %s", exc)
             metrics.inc("llm_turn_failed")
@@ -593,11 +596,7 @@ async def twilio_gather(
         )
 
         # Fast-path: detect explicit goodbye before intent extraction
-        _GOODBYE_FALLBACK = (
-            "au revoir", "bonne journée", "bonsoir", "bonne soirée",
-            "à bientôt", "c'est tout", "raccrocher", "merci beaucoup",
-        )
-        _is_goodbye = any(kw in user_text.lower() for kw in _GOODBYE_FALLBACK)
+        _is_goodbye = any(kw in user_text.lower() for kw in _FAREWELL_KEYWORDS)
         if _is_goodbye:
             response_text = "Au revoir et à bientôt !"
             action_taken = "session_ended"

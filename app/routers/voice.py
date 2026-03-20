@@ -253,10 +253,6 @@ async def _resolve_session(
         # Try DB first
         state = await db_load_session(db, session_id, tenant_id=tenant_id or None)
         if state is not None:
-            # Carry over volatile in-memory attributes (e.g. fallback counter)
-            old = conversation_manager._sessions.get(session_id)
-            if old is not None:
-                state.consecutive_fallbacks = old.consecutive_fallbacks
             # Sync into in-memory cache
             conversation_manager._sessions[session_id] = state
             return state
