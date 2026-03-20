@@ -566,9 +566,13 @@ async def twilio_gather(
             )
             state.messages = new_messages
             action_taken = action_taken or "llm_response"
-            # Detect natural farewell → hang up gracefully
-            _FAREWELL = ("au revoir", "bonne journée", "bonsoir", "à bientôt", "merci, au revoir")
-            if any(kw in response_text.lower() for kw in _FAREWELL):
+            # Detect natural farewell (in bot response OR user input) → hang up gracefully
+            _FAREWELL = (
+                "au revoir", "bonne journée", "bonsoir", "bonne soirée",
+                "à bientôt", "merci, au revoir", "c'est tout", "raccrocher",
+            )
+            if any(kw in response_text.lower() for kw in _FAREWELL) \
+                    or any(kw in user_text.lower() for kw in _FAREWELL):
                 action_taken = "session_ended"
             intent_str = "llm_driven"
             confidence = 1.0
@@ -587,43 +591,55 @@ async def twilio_gather(
             _merge_entities_to_draft,
         )
 
-        intent_result = await extract_intent_async(user_text)
-        intent = intent_result.intent
-        confidence = intent_result.confidence
-        entities = intent_result.entities
-        intent_str = intent.value
-
-        has_active_intent = (
-            state.current_intent is not None
-            and state.current_intent != VoiceIntent.unknown
+        # Fast-path: detect explicit goodbye before intent extraction
+        _GOODBYE_FALLBACK = (
+            "au revoir", "bonne journée", "bonsoir", "bonne soirée",
+            "à bientôt", "c'est tout", "raccrocher", "merci beaucoup",
         )
-
-        if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) \
-                and not has_active_intent:
-            is_fallback = True
-            consecutive = getattr(state, "_consecutive_fallbacks", 0) + 1
-            state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
-
-            if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
-                response_text = _human_transfer_msg()
-                action_taken = "human_transfer_offered"
-            else:
-                idx = (consecutive - 1) % len(_FALLBACK_RESPONSES)
-                response_text = _FALLBACK_RESPONSES[idx]
-                action_taken = "fallback"
-
-            metrics.inc("voice_fallbacks")
+        _is_goodbye = any(kw in user_text.lower() for kw in _GOODBYE_FALLBACK)
+        if _is_goodbye:
+            response_text = "Au revoir et à bientôt !"
+            action_taken = "session_ended"
+            intent_str = "goodbye"
+            confidence = 1.0
         else:
-            state._consecutive_fallbacks = 0  # type: ignore[attr-defined]
-            if intent != VoiceIntent.unknown:
-                state.current_intent = intent
-            _merge_entities_to_draft(state, entities)
+            intent_result = await extract_intent_async(user_text)
+            intent = intent_result.intent
+            confidence = intent_result.confidence
+            entities = intent_result.entities
+            intent_str = intent.value
 
-            handler = _INTENT_HANDLERS.get(state.current_intent or VoiceIntent.unknown)
-            if handler is None:
-                from app.routers.voice import _handle_unknown
-                handler = _handle_unknown
-            response_text, action_taken, data = await handler(state, entities, db)
+            has_active_intent = (
+                state.current_intent is not None
+                and state.current_intent != VoiceIntent.unknown
+            )
+
+            if (confidence < FALLBACK_CONFIDENCE_THRESHOLD or intent == VoiceIntent.unknown) \
+                    and not has_active_intent:
+                is_fallback = True
+                consecutive = getattr(state, "_consecutive_fallbacks", 0) + 1
+                state._consecutive_fallbacks = consecutive  # type: ignore[attr-defined]
+
+                if consecutive >= MAX_CONSECUTIVE_FALLBACKS:
+                    response_text = _human_transfer_msg()
+                    action_taken = "human_transfer_offered"
+                else:
+                    idx = (consecutive - 1) % len(_FALLBACK_RESPONSES)
+                    response_text = _FALLBACK_RESPONSES[idx]
+                    action_taken = "fallback"
+
+                metrics.inc("voice_fallbacks")
+            else:
+                state._consecutive_fallbacks = 0  # type: ignore[attr-defined]
+                if intent != VoiceIntent.unknown:
+                    state.current_intent = intent
+                _merge_entities_to_draft(state, entities)
+
+                handler = _INTENT_HANDLERS.get(state.current_intent or VoiceIntent.unknown)
+                if handler is None:
+                    from app.routers.voice import _handle_unknown
+                    handler = _handle_unknown
+                response_text, action_taken, data = await handler(state, entities, db)
 
     # Persist
     conversation_manager._sessions[call_sid] = state
