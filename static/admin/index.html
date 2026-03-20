@@ -1084,6 +1084,14 @@ const PX_PER_MIN = 1.0;
 const MONTHS = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
 const DAYS_SHORT = ['lun.','mar.','mer.','jeu.','ven.','sam.','dim.'];
 
+// Local timezone YYYY-MM-DD (avoid toISOString UTC shift)
+function ymdLocal(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 const PALETTE = [
   { bg:'#C06545', rgb:'192,101,69',  light:'#fdf0eb', border:'#C06545', text:'#fff' },
   { bg:'#4A8070', rgb:'74,128,112',  light:'#eaf2f0', border:'#4A8070', text:'#fff' },
@@ -1315,7 +1323,7 @@ function renderCalendar() {
   buildGutter();
 
   dates.forEach(date => {
-    const dateStr = date.toISOString().slice(0, 10);
+    const dateStr = ymdLocal(date);
     const isToday = date.getTime() === today.getTime();
     const dayBkgs = visible.filter(b => b.start_time.slice(0, 10) === dateStr);
 
@@ -1421,7 +1429,7 @@ function renderList() {
   }
 
   dates.forEach(date => {
-    const dateStr = date.toISOString().slice(0, 10);
+    const dateStr = ymdLocal(date);
     const dayBkgs = visible.filter(b => b.start_time.slice(0, 10) === dateStr)
                             .sort((a,b) => a.start_time.localeCompare(b.start_time));
     if (!dayBkgs.length) return;
@@ -1762,7 +1770,7 @@ async function openCreateModal(preEmpId = null, preDate = null) {
   document.getElementById('cService').value = '';
   document.getElementById('cEmployee').value = '';
   document.getElementById('cDate').value = '';
-  document.getElementById('cDate').min = new Date().toISOString().slice(0,10);
+  document.getElementById('cDate').min = ymdLocal(new Date());
   document.getElementById('cSlotsWrap').classList.add('hidden');
   document.getElementById('cError').classList.add('hidden');
   document.getElementById('cServiceInfo').classList.add('hidden');
@@ -2897,7 +2905,7 @@ async function renderDayView() {
   const dayDate = getDayDate();
   const dayKeys = ['dim','lun','mar','mer','jeu','ven','sam'];
   const dayKey  = dayKeys[dayDate.getDay()];
-  const dateStr = dayDate.toISOString().slice(0, 10);
+  const dateStr = ymdLocal(dayDate);
 
   // Filter employees working today
   let emps = empsAll.filter(e => {
